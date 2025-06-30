@@ -29,7 +29,7 @@ KEYWORDS = [
     ]
 # Consider using a more specific keyword list if needed
 
-ACCESS_TOKEN = os.getenv("fb_token")
+FB_TOKEN = os.getenv("fb_token")
 FB_PAGE_ID = os.getenv("fb_page_id")
 ig_business_id = os.getenv("ig_business_id")
 MIN_FOLLOWERS = 50000  
@@ -37,7 +37,7 @@ MAX_GOOGLE_PAGES_PER_KEYWORD = 13
 GRAPH_API_VERSION = "v22.0" 
 metadata = MetaData()
 
-# Common non-profile paths on Instagram
+# =============== Common non-profile paths on Instagram ===================
 INSTAGRAM_NON_PROFILE_PATHS = {"explore", "p", "reel", "stories", "tv", "accounts", "emailsignup", "directory"}
 
 # ======================= Functions =======================#
@@ -51,7 +51,7 @@ def get_instagram_business_id(page_id):
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{page_id}"
     params = {
         'fields': 'instagram_business_account',
-        'access_token': ACCESS_TOKEN,
+        'access_token': FB_TOKEN,
     }
     print(f"Attempting to fetch Instagram Business ID for FB Page ID: {page_id}")
     try:
@@ -116,10 +116,10 @@ def search_instagram_usernames(keyword):
                                 if username not in usernames:
                                     usernames.add(username)
                                     logging.info(f"Found username: {username}")
-                time.sleep(2)  # small delay between pages to avoid bot detection
+                time.sleep(2)  
             except Exception as e:
                 logging.warning(f"Failed on page {page//10 + 1}: {e}")
-                break  # Stop if Google blocks or errors occur
+                break  
 
     logging.info(f"Total usernames found: {len(usernames)}")
     return list(usernames)
@@ -211,11 +211,11 @@ def extract_name(text):
 
 def create_db_connection():
     """ Create a database connection. """
-    username = "avnadmin"
-    pwd = "AVNS_iJU3jgYQOVJFlrnC96d"
-    port = 10780
+    username = os.getenv("username")
+    pwd = os.getenv("pwd")
+    port = os.getenv("port")
     database_name = "influencer"
-    host = "influencer-db-eomobamidele-84f0.j.aivencloud.com"
+    host = os.getnenv("host')
     try:
         logging.info("Attempting to connect to the database...")
         logging.info("Database connection established.")
@@ -228,7 +228,7 @@ def create_db_connection():
         logging.error(f"Error connecting to database: {e}")
         return None
 
-def main():
+def commit():
     """ Main execution function. """
     logging.info("Starting Instagram Influencer Scraping Process...")
 
@@ -375,5 +375,3 @@ def main():
     else:
         logging.warning("No influencers met the criteria after validation, or no data could be fetched. No CSV file generated.")
 
-if __name__ == "__main__":
-    main()
