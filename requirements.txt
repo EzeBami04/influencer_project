@@ -1,0 +1,4 @@
+requests
+selenium
+undetectedchrome
+facebook-business
