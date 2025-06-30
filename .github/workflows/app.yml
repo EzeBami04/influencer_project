@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: "0 3 * * 1" # 3am every Monday
 
+permissions:
+  contents: write
+
 jobs:
   run-etl:
     runs-on: ubuntu-latest
@@ -21,6 +24,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # ensures git creds are saved
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,15 +41,20 @@ jobs:
       - name: Run pipeline
         run: python main.py
 
-      - name: Check for file changes
+      - name: Configure Git
         run: |
           git config user.name github-actions
-          git config user.email githubaction@github.com
+          git config user.email github-actions@github.com
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+      - name: Check for file changes
+        id: git_diff
+        run: |
           git add .
-          git diff --staged --quiet || echo "change=true" >> $GITHUB_ENV
+          git diff --staged --quiet || echo "changed=true" >> $GITHUB_ENV
 
       - name: Commit & push if changed
-        if: env.change == 'true'
+        if: env.changed == 'true'
         run: |
           git commit -m "Auto: Updated ETL output"
           git push
