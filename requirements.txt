@@ -1,4 +1,4 @@
 requests
 selenium
-undetectedchrome
+undetected-chromedriver
 facebook-business
