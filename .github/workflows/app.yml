@@ -1,0 +1,15 @@
+name: Influencer Dashboard
+
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    -cron: "0 3 * * 1" # 3am every mondays
+
+jobs:
+  run-etl:
+    runs-on: ubuntu-latest
+env:
+  
+
+  
