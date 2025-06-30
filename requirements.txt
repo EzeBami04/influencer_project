@@ -2,3 +2,8 @@ requests
 selenium
 undetected-chromedriver
 facebook-business
+requests
+pandas
+mysql-connector-python
+SQLAlchemy
+pymysql
