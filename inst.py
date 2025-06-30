@@ -7,7 +7,7 @@ import pandas as pd
 import re
 from mysql.connector import connection
 from sqlalchemy import create_engine
-from dotenv import load_dotenv
+
 import undetected_chromedriver as uc
 from contextlib import closing
 from selenium.webdriver.common.by import By
@@ -19,7 +19,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S')
-load_dotenv()
 
 # ================= Configuration =============#
 KEYWORDS = [
