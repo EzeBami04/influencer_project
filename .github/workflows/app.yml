@@ -9,7 +9,30 @@ on:
 jobs:
   run-etl:
     runs-on: ubuntu-latest
-env:
+    env:
+      fb_token: ${{ secrets.fb_token }}
+      app_id: ${{ secrets.app_id }}
+      app_secret: ${{ secrets.app_secret }}
+      ig_business_id: ${{ secrets.ig_business_id }}
+    
+    
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+      
+        - name: Set up Python
+          uses: actions/setup-python@v5
+          with:
+            python-version: '3.11'
+            cache: 'pip'
+
+        - name: Install dependencies
+          run: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            
+       
+    
   
 
   
