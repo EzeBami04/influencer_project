@@ -4,35 +4,47 @@ on:
   push:
   workflow_dispatch:
   schedule:
-    -cron: "0 3 * * 1" # 3am every mondays
+    - cron: "0 3 * * 1" # 3am every Monday
 
 jobs:
   run-etl:
     runs-on: ubuntu-latest
     env:
-      fb_token: ${{ secrets.fb_token }}
-      app_id: ${{ secrets.app_id }}
-      app_secret: ${{ secrets.app_secret }}
-      ig_business_id: ${{ secrets.ig_business_id }}
-    
-    
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-      
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: '3.11'
-            cache: 'pip'
+      FB_TOKEN: ${{ secrets.fb_token }}
+      APP_IG: ${{ secrets.app_id }}
+      APP_SECRET: ${{ secrets.app_secret }}
+      IG_BUSINESS_ID: ${{ secrets.ig_business_id }}
+      USERNAME: ${{ secrets.username }}
+      PORT: ${{ secrets.port }}
+      PWD: ${{ secrets.pwd }}
 
-        - name: Install dependencies
-          run: |
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-            
-       
-    
-  
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt       
+
+      - name: Run pipeline
+        run: python main.py
+
+      - name: Check for file changes
+        run: |
+          git config user.name github-actions
+          git config user.email githubaction@github.com
+          git add .
+          git diff --staged --quiet || echo "change=true" >> $GITHUB_ENV
+
+      - name: Commit & push if changed
+        if: env.change == 'true'
+        run: |
+          git commit -m "Auto: Updated ETL output"
+          git push
