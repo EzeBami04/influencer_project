@@ -215,7 +215,7 @@ def create_db_connection():
     pwd = os.getenv("pwd")
     port = os.getenv("port")
     database_name = "influencer"
-    host = os.getnenv("host')
+    host = os.getnenv("host")
     try:
         logging.info("Attempting to connect to the database...")
         logging.info("Database connection established.")
