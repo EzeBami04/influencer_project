@@ -16,8 +16,8 @@ from contextlib import closing
 
 # ================ CONFIGURATION ================
 load_dotenv()
-ACCESS_TOKEN = os.getenv("fb_token")
-FB_PAGE_ID = os.getenv("fb_page_id")
+ACCESS_TOKEN = os.getenv("FB_TOKEN")
+FB_PAGE_ID = os.getenv("FB_PAGE_ID")
 GRAPH_API_VERSION = "v22.0"
 MIN_FOLLOWERS = 50000
 KEYWORDS = [
