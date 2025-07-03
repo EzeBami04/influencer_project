@@ -117,9 +117,9 @@ def process_users_concurrently(usernames, ig_business_id):
     return results
 
 def create_db_connection():
-    username = "avnadmin"
-    pwd = "AVNS_iJU3jgYQOVJFlrnC96d"
-    host = "influencer-db-eomobamidele-84f0.j.aivencloud.com"
+    username = os.getenv("USERNAME")
+    pwd = os.getenv("PWD")
+    host = os.getenv("HOST")
     port = 10780
     db = "influencer"
     return create_engine(f"mysql+pymysql://{username}:{pwd}@{host}:{port}/{db}")
