@@ -7,7 +7,7 @@ import requests
 import pandas as pd
 from sqlalchemy import create_engine,  MetaData
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dotenv import load_dotenv
+
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -15,7 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from contextlib import closing
 
 # ================ CONFIGURATION ================
-load_dotenv()
+
 ACCESS_TOKEN = os.getenv("FB_TOKEN")
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
 GRAPH_API_VERSION = "v22.0"
