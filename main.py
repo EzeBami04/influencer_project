@@ -1,8 +1,8 @@
-from inst import commit
+from inst import load
 
 
 def main():
-  commit()
+  load()
 
 
 if "__name__" == "main":
