@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import undetected_chromedriver as uc
 from fake_useragent import UserAgent
-from requests_random_user_agent import USER_AGENTS
+
 
 
 import pandas as pd
