@@ -7,3 +7,4 @@ pandas
 mysql-connector-python
 SQLAlchemy
 pymysql
+fake-useragent
