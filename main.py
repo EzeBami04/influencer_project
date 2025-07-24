@@ -6,7 +6,7 @@ from fake_useragent import UserAgent
 
 import pandas as pd
 from sqlalchemy import Table, Column, Integer, BigInteger, Text, TIMESTAMP, MetaData
-from sel import keywords, search_ig_usernames_sequential, get_instagram_business_id, validate_and_fetch_user, create_db_connection
+from inst import keywords, search_ig_usernames_sequential, get_instagram_business_id, validate_and_fetch_user, create_db_connection
 from contextlib import closing
 from mysql.connector import connection
 import logging
