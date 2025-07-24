@@ -12,8 +12,7 @@ from mysql.connector import connection
 import logging
 
 import os 
-from dotenv import load_dotenv
-load_dotenv()
+
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s], [%(levelname)s], [%(message)s]', datefmt='%Y-%m-%d %H:%M:%S')
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
