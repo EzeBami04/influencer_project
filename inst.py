@@ -12,12 +12,12 @@ from functools import wraps
 from contextlib import closing
 import logging
 import os
-from dotenv import load_dotenv
+
 
 import mysql.connector.errors as MySQLConnectorError 
 
 # --- Configuration and Initialization ---
-load_dotenv()
+
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s], [%(levelname)s], [%(message)s]', datefmt='%Y-%m-%d %H:%M:%S')
 
