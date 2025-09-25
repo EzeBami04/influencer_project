@@ -1,326 +1,351 @@
-import os
+# from .search import run_engine_and_save
 import requests
-
 import duckdb
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
+import psycopg2
+from sqlalchemy import MetaData
+
 import pandas as pd
 
-from psycopg2.extras import execute_values
-from sqlalchemy import text
-from requests.adapters import HTTPAdapter
-from requests.sessions import Session
-from urllib3.util import Retry
-from datetime import datetime
+import emoji
 
-from .database import connect_to_database
-from .inst import remove_emojis
-import csv
-import re
-import logging
+
+import os
+import random
+from datetime import datetime, timedelta
+import pytz
+import time
+
 from dotenv import load_dotenv
+from functools import wraps, cache
+from .database import connect_to_database
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+metadata = MetaData()
+
+# ============== STEP 1: Remove emojis/emoticons ==============
+def remove_emojis(text: str) -> str:
+    return emoji.replace_emoji(text, replace="")
+
+
+
+#============================================================================================================#
 
 
 load_dotenv()
+#============================================= Config ====================================================
+logging.getLogger().setLevel(logging.INFO)
 
-#======================== Config ==========================================
-logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
-API_KEY = os.getenv("YOUTUBE_API_KEY")
+metadata = MetaData()
+FB_PAGE_ID = os.getenv("FB_PAGE_ID")
+access_token = os.getenv("fb_token")
+graph_api = "v22.0"
+min_followers = 50000
+ig_id= os.getenv("ig_business_id")
 
-# ============Setup HTTP session with retry mechanism
-session = Session()
-retry = Retry(total=2, backoff_factor=5, status_forcelist=[400, 429, 403, 500])
+session = requests.Session()
+retry = Retry(
+    total=3,
+    backoff_factor=100,
+    status_forcelist=[400, 443, 429, 403, 500, 502, 503, 504]
+)
 session.mount("https://", HTTPAdapter(max_retries=retry))
 
-# API endpoints
-CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
-PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
-VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 
-def read_usernames(file_path):
-    """Read usernames from CSV file, removing leading '@'."""
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            return [row[0].strip() for row in reader if row]
-    except Exception as e:
-        logging.error(f"Error reading usernames: {e}")
-        return []
 
-def clean_text(text):
-    """Clean text data by removing unwanted characters and normalizing."""
-    if not text:
-        return ""
-    text = re.sub(r'\s+', ' ', text.strip())
-    return text[:65535]
-# ============== Data Ingestion and Parsing Json============================
-def get_channel_details(username, api_key):
-    """Fetch channel details from YouTube API."""
-    params = {
-        "part": "snippet,contentDetails,statistics",
-        "forHandle": username,
-        "key": api_key
-    }
-    try:
-        res = session.get(CHANNELS_URL, params=params)
-        logging.info(f"Fetching channel details for {username}, Status: {res.status_code}")
-        if res.status_code == 200:
-            data = res.json()
-            if "items" in data and data["items"]:
-                channel = data["items"][0]
-                return {
-                    "channel_id": channel["id"],
-                    "channel_title": clean_text(channel["snippet"].get("title", "")),
-                    "channel_description": clean_text(channel["snippet"].get("description", "")),
-                    "channel_created_at": channel["snippet"].get("publishedAt"),
-                    "profile_url": f"https://www.youtube.com/@{username}",
-                    "thumbnail_url": channel["snippet"]["thumbnails"]["high"]["url"],
-                    "subscriber_count": int(channel["statistics"].get("subscriberCount", 0)),
-                    "total_video_count": int(channel["statistics"].get("videoCount", 0)),
-                    "total_view_count": int(channel["statistics"].get("viewCount", 0)),
-                    "uploads_playlist_id": channel["contentDetails"]["relatedPlaylists"]["uploads"]
-                }
-            logging.warning(f"No channel found for username: {username}")
+INSTAGRAM_NON_PROFILE_PATHS = {"explore", "p", "reel", "stories", "tv", "accounts"}
+#=======================================================================================
+
+
+
+def random_sleep(a=1, b=3):
+    """ Sleeps for a random duration to mimic human behavior. """
+    time.sleep(random.uniform(a, b))
+
+def retry_on_rate_limit(max_retries=3, backoff_base=60): 
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                result = func(*args, **kwargs)
+                if result == "RATE_LIMIT":
+                    sleep_time = backoff_base * (2 ** attempt)
+                    logging.warning(f"Rate limit hit. Sleeping for {sleep_time} seconds before retrying {func.__name__} (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(sleep_time)
+                    continue
+                return result
+            logging.error(f"Exceeded max retries for {func.__name__}. Giving up.")
             return None
-        logging.error(f"Channel request failed: {res.text}")
-        return None
-    except Exception as e:
-        logging.error(f"Error fetching channel details for {username}: {e}")
-        return None
+        return wrapper
+    return decorator
 
-def get_channel_videos(playlist_id, api_key, max_results=5):
-    """Fetch recent videos from channel's uploads playlist."""
+@cache
+def get_instagram_business_id(page_id):
+    """ Fetches the Instagram Business Account ID linked to a Facebook Page. """
+    url = f"https://graph.facebook.com/{graph_api}/{page_id}"
     params = {
-        "part": "snippet,contentDetails",
-        "playlistId": playlist_id,
-        "maxResults": max_results,
-        "key": api_key
+        'fields': 'instagram_business_account',
+        'access_token': access_token,
     }
+    logging.info(f"Attempting to fetch Instagram Business ID for FB Page ID: {page_id}")
     try:
-        res = session.get(PLAYLIST_ITEMS_URL, params=params)
-        if res.status_code != 200:
-            logging.error(f"Playlist fetch failed: {res.text}")
-            return []
+        res = session.get(url, params=params, timeout=30)
+        res.raise_for_status()
         data = res.json()
-        videos = []
-        for item in data.get("items", []):
-            video_id = item["contentDetails"]["videoId"]
-            videos.append({
-                "video_id": video_id,
-                "video_title": clean_text(item["snippet"]["title"]),
-                "video_description": clean_text(item["snippet"].get("description", "")),
-                "video_published_at": item["contentDetails"]["videoPublishedAt"],
-                "video_url": f"https://www.youtube.com/watch?v={video_id}"
-            })
-        return videos
-    except Exception as e:
-        logging.error(f"Error fetching videos for playlist {playlist_id}: {e}")
-        return []
-
-def get_video_stats(video_ids, api_key):
-    """Fetch statistics for given video IDs."""
-    if not video_ids:
-        return {}
-    params = {
-        "part": "statistics",
-        "id": ",".join(video_ids),
-        "key": api_key
-    }
-    try:
-        res = session.get(VIDEOS_URL, params=params)
-        if res.status_code != 200:
-            logging.error(f"Video stats fetch failed: {res.text}")
-            return {}
-        data = res.json()
-        stats = {}
-        for item in data.get("items", []):
-            stats[item["id"]] = {
-                "video_views": int(item["statistics"].get("viewCount", 0)),
-                "video_likes": int(item["statistics"].get("likeCount", 0)),
-                "video_comments": int(item["statistics"].get("commentCount", 0)),
-            }
-        return stats
-    except Exception as e:
-        logging.error(f"Error fetching video stats: {e}")
-        return {}
-
-
-def youtube_data_pipeline(usernames, api_key, max_videos=10):
-    """Main pipeline to fetch and process YouTube data."""
-    rows = []
-    for username in usernames:
-        logging.info(f"Processing username: {username}")
-        channel_data = get_channel_details(username, api_key)
-        if not channel_data:
-            continue
-        videos = get_channel_videos(channel_data["uploads_playlist_id"], api_key, max_results=max_videos)
-        video_ids = [v["video_id"] for v in videos]
-        video_stats = get_video_stats(video_ids, api_key)
-        for video in videos:
-            vid = video["video_id"]
-            video_stat = video_stats.get(vid, {})
-
-            #========================= Parse response and Map Schema ======================#
-            row = {
-                "channel_id": channel_data["channel_id"],
-                "username": username,
-                "channel_title": channel_data["channel_title"],
-                "channel_description": channel_data["channel_description"],
-                "subscriber_count": channel_data["subscriber_count"],
-                "total_view_count": channel_data["total_view_count"],
-                "total_video_count": channel_data["total_video_count"],
-                "uploads_playlist_id": channel_data["uploads_playlist_id"],
-                "channel_created_at": channel_data["channel_created_at"],
-                "profile_url": channel_data["profile_url"],
-                "thumbnail_url": channel_data["thumbnail_url"],
-                "video_id": video["video_id"],
-                "video_title": video["video_title"],
-                "video_description": video["video_description"],
-                "video_published_at": video["video_published_at"],
-                "video_url": video["video_url"],
-                "video_views": video_stat.get("video_views", 0),
-                "video_likes": video_stat.get("video_likes", 0),
-                "video_comments": video_stat.get("video_comments", 0),
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
-                }
-            rows.append(row)
-    if not rows:
-        logging.warning("No data fetched from YouTube API")
+        ig_account_info = data.get('instagram_business_account')
+        if ig_account_info and 'id' in ig_account_info:
+            ig_id = ig_account_info['id']
+            logging.info(f"Successfully retrieved Instagram Business ID: {ig_id}")
+            return ig_id
+        else:
+            logging.error(f"Error: 'instagram_business_account' field not found or missing 'id'. Response: {data}")
+            logging.error("Ensure the Facebook Page is connected to an Instagram Business/Creator account.")
+            return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching Instagram Business ID: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error(f"Response Status Code: {e.response.status_code}")
+            logging.error(f"Response Text: {e.response.text}")
         return None
-    return rows
-
-def create_youtube_data_table(conn):
-    """Create the YouTube data table if it doesn't exist."""
-    create_table_query = """
-    CREATE TABLE IF NOT EXISTS influencer_youtube (
-        id SERIAL PRIMARY KEY,
-        channel_id VARCHAR(100) NOT NULL,
-        username VARCHAR(100) NOT NULL,
-        channel_title TEXT,
-        channel_description TEXT,
-        subscriber_count BIGINT,
-        total_view_count BIGINT,
-        total_video_count BIGINT,
-        uploads_playlist_id VARCHAR(100),
-        channel_created_at TIMESTAMP,
-        profile_url VARCHAR(255),
-        thumbnail_url VARCHAR(255),
-        video_id VARCHAR(100),
-        video_title TEXT,
-        video_description TEXT,
-        video_published_at TIMESTAMP,
-        video_url VARCHAR(255),
-        video_views BIGINT,
-        video_likes BIGINT,
-        video_comments BIGINT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (channel_id, video_id)
-    );
-    """
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(create_table_query)
-            conn.commit()
-        logging.info("YouTube data table created or already exists")
     except Exception as e:
-        logging.error(f"Error creating table: {e}")
-        conn.rollback()
+        logging.error(f"An unexpected error occurred in get_instagram_business_id: {e}")
+        return None
 
-
-# usernames = run
-from psycopg2.extras import execute_values
-
-def youtube_data(usernames):
-    """Main execution function."""
-    data = youtube_data_pipeline(usernames, API_KEY, max_videos=10)
-    columns = [
-        "channel_id","username", "channel_title", "channel_description", "subscriber_count",
-        "total_view_count", "total_video_count", "uploads_playlist_id","channel_created_at","profile_url", "thumbnail_url",
-        "video_id","video_title", "video_description", "video_published_at", 
-        "video_url", "video_views", "video_likes", "video_comments", "created_at", "updated_at"
-    ]
-
-    df = pd.DataFrame(data)
-    df = df[[col for col in columns if col in df.columns]]
-    if df.empty:
-        logging.warning("DataFrame is empty after filtering. Skipping.")
-        return
-
-    # ==================== Clean and cast types===================
-    df['channel_id'] = df['channel_id'].astype(str)
-    df['username'] = df['username'].astype(str)
-    df['channel_title'] = df['channel_title'].astype(str)
-    df['channel_description'] = df['channel_description'].apply(remove_emojis).replace(r"[#@/]", ' ', regex=True)
-    df['subscriber_count'] = df['subscriber_count'].fillna(0).astype(int)
-    df['total_view_count'] = df['total_view_count'].fillna(0).astype(int)
-    df['total_video_count'] = df['total_video_count'].fillna(0).astype(int)
-    df['uploads_playlist_id'] = df['uploads_playlist_id'].astype(str)
-    df['profile_url'] = df['profile_url'].astype(str)
-    df['thumbnail_url'] = df['thumbnail_url'].astype(str)
-    df['video_id'] = df['video_id'].astype(str)
-    df['video_title'] = df['video_title'].astype(str).apply(remove_emojis).replace(r'[#@/&]', ' ', regex=True)
-    df['video_description'] = df['video_description'].apply(remove_emojis).replace(r"[#@/&]", " ", regex=True)
-    df['video_published_at'] = pd.to_datetime(df['video_published_at'], errors="coerce")
-    df['video_url'] = df['video_url'].astype(str)
-    df['video_views'] = df['video_views'].fillna(0).astype(int)
-    df['video_likes'] = df['video_likes'].fillna(0).astype(int)
-    df['video_comments'] = df['video_comments'].fillna(0).astype(int)
-    df['created_at'] = pd.to_datetime(df['created_at'], errors="coerce")
-    df['updated_at'] = pd.to_datetime(df['updated_at'], errors="coerce")
-
-    # Convert DataFrame to list of tuples
-    records = [tuple(row) for row in df.to_numpy()]
-
-    engine = connect_to_database()
+@cache
+@retry_on_rate_limit(max_retries=4, backoff_base=60)
+def validate_and_fetch_user(username, ig_business_id):
+    """Fetches Instagram Business/Creator data from Graph API (no follower re-validation)."""
     
-    if not engine:
-        logging.error("Failed to connect to database")
-        return
-    create_youtube_data_table(engine)
+    fields = (
+        f'business_discovery.username({username})'
+        '{id,username,profile_picture_url,name,biography,followers_count,media_count,media.limit(10){id,caption,like_count,comments_count,timestamp,media_url,permalink}}'
+    )
+    url = f'https://graph.facebook.com/{graph_api}/{ig_business_id}'
+    params = {
+        'fields': fields, 
+        'access_token': access_token
+    }
+
+    logging.info(f"Fetching data for @{username} via Graph API...")
     try:
-        with engine.cursor() as cursor:
-            col_names = ", ".join(columns)
-            insert_query = f"""
-                INSERT INTO influencer_youtube ({col_names})
-                VALUES %s
-                ON CONFLICT (channel_id, video_id) 
-                DO UPDATE  SET 
-                    channel_id = EXCLUDED.channel_id,
-                    username = EXCLUDED.username, 
-                    channel_title = EXCLUDED.channel_title, 
-                    channel_description = EXCLUDED.channel_description, 
-                    subscriber_count = EXCLUDED.subscriber_count,
-                    total_view_count = EXCLUDED.total_view_count, 
-                    total_video_count = EXCLUDED.total_video_count, 
-                    uploads_playlist_id = EXCLUDED.uploads_playlist_id,
-                    channel_created_at = EXCLUDED.channel_created_at,
-                    profile_url = EXCLUDED.profile_url, 
-                    thumbnail_url = EXCLUDED.thumbnail_url,
-                    video_id = EXCLUDED.video_id,
-                    video_title = EXCLUDED.video_title, 
-                    video_description = EXCLUDED.video_description, 
-                    video_published_at = EXCLUDED.video_published_at, 
-                    video_url = EXCLUDED.video_url, 
-                    video_views = EXCLUDED.video_views, 
-                    video_likes = EXCLUDED.video_likes, 
-                    video_comments = EXCLUDED.video_comments,
-                    created_at = EXCLUDED.created_at, 
-                    updated_at = EXCLUDED.updated_at;
-            """
-            execute_values(cursor, insert_query, records)
-            engine.commit()
-        logging.info(f"Inserted {len(records)} rows into influencer_youtube")
+        res = session.get(url, params=params, timeout=60)
+        res.raise_for_status()
+        try:
+            data = res.json()
+        except ValueError as e:
+            logging.error(f"Failed to parse JSON for @{username}: {e}. Response: {res.text[:500]}")
+            return None
+
+        if "error" in data:
+            error_code = data["error"].get("code")
+            if error_code in [4, 17, 613] or "rate limit" in data["error"].get("message", "").lower():
+                logging.warning(f"API Error (rate limit) for @{username}: {data['error'].get('message', '')}")
+                return "RATE_LIMIT"
+            logging.info(f"API Error for @{len(username)}: {data['error'].get('message', '')}. Skipping.")
+            return None
+
+        user_data = data.get("business_discovery")
+        if not user_data:
+            logging.info(f"'business_discovery' missing for @{len(username)}, likely not a Business/Creator account.")
+            return None
+
+        
+        logging.info(f"  @{len(username)} found. Followers: {user_data.get('followers_count', 0)}")
+        return user_data
+
+    except requests.exceptions.Timeout:
+        logging.warning(f"Timeout fetching @{len(username)}. Skipping.")
+        return None
+    except requests.exceptions.RequestException as e:
+        logging.warning(f"Network error fetching @{len(username)}: {e}")
+        return None
     except Exception as e:
-        logging.error(f"Error inserting data: {e}")
-        engine.rollback()
-    finally:
-        engine.close()
+        logging.warning(f"Unexpected error fetching @{len(username)}: {e}")
+        return None
 
 
-#=== Test End to End implementation
+
+
+def insta_data(usernames):
+    get_instagram_business_id(FB_PAGE_ID)
+    validated_influencer_data = []
+    validated_usernames = set()
+
+    logging.info("====== Starting parallel validation with Facebook Graph API ======")
+    
+    with ThreadPoolExecutor(max_workers=2) as executor: 
+        future_to_username = {
+            executor.submit(validate_and_fetch_user, username, ig_id): username
+            for username in list(usernames) 
+            }
+
+        for future in as_completed(future_to_username):
+            username = future_to_username[future]
+            try:
+                user_details = future.result()
+                if user_details:
+                    # Define media_items first
+                    media_items = user_details.get("media", {}).get("data", [])
+                    # Use offset-aware cutoff_date
+                    cutoff_date = datetime.now(pytz.UTC) - timedelta(days=30*5)
+                    # Filter media items
+                    filtered_media = [
+                        m for m in media_items
+                        if "timestamp" in m and datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")) >= cutoff_date
+                    ]
+
+                    validated_usernames.add(user_details.get("username"))
+                    posts = user_details.get("media", {}).get("data", [])
+                    for post in posts:
+                        post_id = post.get("id")
+
+                        # Default values
+                        impressions, reach = 0, 0
+
+                        # Fetch impressions & reach for each post
+                        try:
+                            insight_url = f"https://graph.facebook.com/{graph_api}/{post_id}/insights"
+                            insight_params = {
+                                "metric": "impressions,reach",
+                                "access_token": access_token
+                            }
+                            insight_res = session.get(insight_url, params=insight_params, timeout=30).json()
+                            if "data" in insight_res:
+                                for metric in insight_res["data"]:
+                                    if metric["name"] == "impressions":
+                                        impressions = metric["values"][0]["value"]
+                                    elif metric["name"] == "reach":
+                                        reach = metric["values"][0]["value"]
+                        except Exception as e:
+                            logging.warning(f"Could not fetch insights for media {post_id}: {e}")
+
+                        validated_influencer_data.append({
+                            "user_id": user_details.get("id"),
+                            "username": user_details.get("username"),
+                            "profile_url": f"https://www.instagram.com/{user_details.get('username')}/",
+                            "name": user_details.get("name"),
+                            "profile_picture_url": user_details.get("profile_picture_url"),
+                            "bio": user_details.get("biography"),
+                            "follower_count": user_details.get("followers_count"),
+                            "media_count": user_details.get("media_count"),
+                            "post_caption": post.get("caption"),
+                            "like_count": post.get("like_count"),
+                            "comments_count": post.get("comments_count"),
+                            "timestamp": post.get("timestamp"),
+                            "post_media_url": post.get("media_url"),
+                            "post_permalink": post.get("permalink"),
+                            "impressions": impressions,      
+                            "reach": reach                   
+                        })
+
+            except Exception as e:
+                logging.error(f"Error processing @{username}: {e}")
+
+    logging.info(f"===Finished validation. Valid influencers: {len(validated_usernames)}. Total rows (posts): {len(validated_influencer_data)}")
+
+
+    if validated_influencer_data:
+            df = pd.DataFrame(validated_influencer_data)
+            columns_order = [
+                "user_id","username", "name", "profile_url", "follower_count", "bio", "media_count",
+                "profile_picture_url", "timestamp", "post_caption", "like_count", "impression", "reach",
+                "comments_count", "post_media_url", "post_permalink"
+                ]
+            df_columns = [col for col in columns_order if col in df.columns]
+            df = df[df_columns]
+            
+            # ========================= Data Cleaning and Type Casting================================== 
+            df['bio'] = df['bio'].astype(str).str.replace("/", "", regex=True)
+            df['follower_count'] = df['follower_count'].fillna(0).astype(int)
+            df['like_count'] = df['like_count'].fillna(0).astype(int)
+            df['comments_count'] = df['comments_count'].fillna(0).astype(int)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['profile_picture_url'] = df['profile_picture_url'].str.rstrip("/")
+            df['post_media_url'] = df['post_media_url'].str.rstrip("/")
+            df['bio'] = df['bio'].astype(str).str.replace(r'@\w+', ' ', regex=True)
+            df["bio"] = df['bio'].apply(remove_emojis)
+            df['impression'] = df['impression'].fillna(0).astype(int)
+            df['reach'] = df['reach'].fillna(0).astype(int)
+            df['post_caption'] = df['post_caption'].astype(str).replace(r'@\w+', '', regex=True)
+            df['post_caption'] = df['post_caption'].astype(str).replace(r'http\S+|www\S+|https\S+', '', regex=True)
+            df["post_caption"] = df['post_caption'].apply(remove_emojis)
+            df['name'] = df['name'].fillna('').astype(str)
+            df['name'] = df['name'].apply(remove_emojis)
+            df['media_count'] = (
+                df.groupby("user_id").cumcount().apply(lambda x: 0 if x > 0 else None).fillna(df["media_count"]).astype(int))
+    
+            df['follower_count'] = (
+                df.groupby("user_id").cumcount().apply(lambda x: 0 if x > 0 else None).fillna(df["follower_count"]).astype(int))
+            
+            duck = duckdb.connect() 
+            duck_df = duck.register("df", df)
+            df_cleaned = duck_df.execute("""
+                SELECT 
+                    user_id, username, name, profile_url, follower_count,
+                    REPLACE(REPLACE(REPLACE(bio, '|', ' '), '#', ' '), '&', ' ') AS bio,
+                    media_count, impression, reach, profile_picture_url, timestamp, 
+                    post_caption, like_count, comments_count, post_media_url, post_permalink
+                FROM df
+            """).fetchdf()
+            #=========================Load to Postgres ==================================
+            upsert_columns = """user_id,username, name, profile_url, follower_count, bio, media_count,
+                                       profile_picture_url, timestamp, post_caption, like_count, impression, reach,
+                                       comments_count, post_media_url, post_permalink"""
+            upsert_stmt = f"""INSERT INTO TABLE influencer_instagram({upsert_columns})
+                                VALUES (%s, %s, %s)
+                                ON CONFLICT (user_id, user_name)
+                                DO UPDATE SET 
+                                    user_id = EXCLUDED.user_id,
+                                    username = EXCLUDED.username, 
+                                    name = EXCLUDED.name, 
+                                    profile_url = EXCLUDED.profile_url, 
+                                    follower_count = EXCLUDED.follow_count, 
+                                    bio = EXCLUDED.bio, 
+                                    media_count = EXCLUDED.media_count,
+                                    profile_picture_url = EXCLUDED.profile_picture_url, 
+                                    timestamp = EXCLUDED.timestamp, 
+                                    post_caption = EXCLUDED.post_caption, 
+                                    like_count = EXCLUDED.like_count, 
+                                    impression = EXCLUDED.impression, 
+                                    reach = EXCLUDED.reach,
+                                    comments_count = EXCLUDED.comments_count, 
+                                    post_media_url = EXCLUDED.post_media_url, 
+                                    post_permalink = EXCLUDED.post_permalink"""
+            engine = connect_to_database()
+            if engine:
+                try:
+                    with engine.cursor() as cursor:
+                    # =================================== Creating table if not exists===================================
+                        cursor.execute("SET SCHEMA PATH TO PUBLIC")
+                        cursor.execute("""
+                                    Create table if not exists influencer_instagram(
+                                                    user_id Text,username Varchar(100), name Varchar(100), profile_url Text,
+                                                    follower_count Bigint, bio Text, media_count Int,
+                                                    impression Int, reach Int, profile_picture_url Text, timestamp Timestamp, post_caption Text, like_count Int,
+                                                    comments_count Int, post_media_url Text, post_permalink Text);""")
+                        # ================= Incremental Load to Postgres===========
+                        records = df_cleaned.to_records(index=False)
+                        for row in records:
+                            cursor.execute(upsert_stmt, tuple(row))
+                        engine.commit()
+                except psycopg2.DatabaseError as e:
+                    logging.error("Database Error on this Transaction")
+                    engine.rollback()
+                finally:
+                    cursor.close()
+                    engine.close()
+
 import csv
+from pathlib import Path
+
 if __name__ == "__main__":
-    path = r"C:/Users/Bamidele/Desktop/inf/usernames.csv"
+    path = "C:/Users/Bamidele/Desktop/webscraping/usernames.csv"
+
+
     usernames = []
     with open(path, 'r', newline='', encoding='utf-8') as f:
         reader = csv.reader(f)
@@ -330,8 +355,6 @@ if __name__ == "__main__":
                 
                 username = username.strip()
                 if len(username) > 2: 
-                    usernames.append(username)
-    
-    # usernames = ["patoranking", "wizkidayo"]
-    youtube_data(usernames)
+                    usernames.append(username)  
 
+    insta_data(usernames)

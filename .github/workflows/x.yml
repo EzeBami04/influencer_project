@@ -1,0 +1,53 @@
+name: Instagram influencer
+
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"  # runs at 03:00 every Monday
+
+permissions:
+  contents: write
+
+jobs:
+  run-ig_pipeline:
+    runs-on: ubuntu-latest
+    env:
+      X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}  
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --no-cache-dir
+
+      - name: Run pipeline
+        run: python -m xuser.py
+
+      - name: Configure Git
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+      - name: Check for file changes
+        id: git_diff
+        run: |
+          git add .
+          if ! git diff --staged --quiet; then
+            echo "changed=true" >> $GITHUB_ENV
+          
+
+      - name: Commit & push if changed
+        if: env.changed == 'true'
+        run: |
+          git commit -m "Auto: Updated ETL output"
+          git push

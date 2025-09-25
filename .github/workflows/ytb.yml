@@ -1,45 +1,36 @@
-name: Influencer Dashboard
+name: Instagram influencer
 
 on:
   push:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * 1" # 3am every Monday
+    - cron: "0 3 * * 1"  # runs at 03:00 every Monday
 
 permissions:
   contents: write
 
 jobs:
-  run-etl:
+  run-ig_pipeline:
     runs-on: ubuntu-latest
     env:
-      FB_TOKEN: ${{ secrets.fb_token }}
-      APP_IG: ${{ secrets.app_id }}
-      APP_SECRET: ${{ secrets.app_secret }}
-      IG_BUSINESS_ID: ${{ secrets.ig_business_id }}
-      USERNAME: ${{ secrets.username }}
-      PORT: ${{ secrets.port }}
-      PWD: ${{ secrets.pwd }}
-
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true  # ensures git creds are saved
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt       
+          pip install -r requirements.txt --no-cache-dir
 
       - name: Run pipeline
-        run: python main.py
+        run: python -m yt.py
 
       - name: Configure Git
         run: |
@@ -51,7 +42,9 @@ jobs:
         id: git_diff
         run: |
           git add .
-          git diff --staged --quiet || echo "changed=true" >> $GITHUB_ENV
+          if ! git diff --staged --quiet; then
+            echo "changed=true" >> $GITHUB_ENV
+          
 
       - name: Commit & push if changed
         if: env.changed == 'true'
