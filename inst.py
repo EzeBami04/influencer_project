@@ -42,10 +42,10 @@ logging.getLogger().setLevel(logging.INFO)
 
 metadata = MetaData()
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
-access_token = os.getenv("fb_token")
+access_token = os.getenv("FB_TOKEN")
 graph_api = "v22.0"
 min_followers = 50000
-ig_id= os.getenv("ig_business_id")
+ig_id= os.getenv("IG_BUSIINESS_ID")
 
 session = requests.Session()
 retry = Retry(
@@ -356,5 +356,6 @@ if __name__ == "__main__":
                 username = username.strip()
                 if len(username) > 2: 
                     usernames.append(username)  
+
 
     insta_data(usernames)
