@@ -30,13 +30,13 @@ All discovered usernames are then stored in a **PostgreSQL database** for furthe
 
 ## 🧠 Key Features
 
-✅ Asynchronous execution with **`asyncio`** for parallel profile discovery  
-✅ **Playwright + BeautifulSoup4** integration for scraping and parsing  
-✅ Proxy rotation support for Google Search stealth mode  
-✅ Follower count normalization and influencer filtering  
-✅ Robust **PostgreSQL data persistence** via `psycopg2`  
-✅ Configurable keyword lists and concurrency limits  
-✅ Auto table creation (`username_search`) on first run  
+ Asynchronous execution with **`asyncio`** for parallel profile discovery  
+ **Playwright + BeautifulSoup4** integration for scraping and parsing  
+ Proxy rotation support for Google Search stealth mode  
+ Follower count normalization and influencer filtering  
+ Robust **PostgreSQL data persistence** via `psycopg2`  
+ Configurable keyword lists and concurrency limits  
+ Auto table creation (`username_search`) on first run  
 
 ---
 
