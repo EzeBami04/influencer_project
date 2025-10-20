@@ -1,13 +1,11 @@
-import requests
 import tweepy
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from functools import cache
+
+
 import duckdb
 import pandas as pd
 import psycopg2
-from .inst import remove_emojis
-from .database import connect_to_database
+import emoji
+
 import os
 import time
 from dotenv import load_dotenv
@@ -20,7 +18,24 @@ logging.getLogger().setLevel(logging.INFO)
 bearer_token = os.getenv("x_bearer_token")
 client = tweepy.Client(bearer_token=bearer_token, wait_on_rate_limit=True)
 #=============================================================================
+def connect_to_database():
+    try:
+        engine = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+            dbname=os.getenv("DB_NAME"),
+            password=os.getenv("DB_PASS"),
+            user=os.getenv("DB_USERNAME"),
+            sslmode="require"
+        )
+    except Exception as e:
+        logging.error(f"Error connecting to database: {e}")
+        return None
+    return engine
 
+def remove_emojis(text: str) -> str:
+    """Helper to strip emojis."""
+    return emoji.replace_emoji(text, replace="")
 def user_data(username):
     """
     Fetch user profile (and optionally tweets) from Twitter API.
@@ -65,7 +80,7 @@ def user_data(username):
             }
 
             # Only fetch tweets if requested
-            if fetch_tweets:
+            if user_data:
                 tweets_response = client.get_users_tweets(
                     user.id,
                     max_results=5,
@@ -188,7 +203,27 @@ def x_data(username):
 #Test 
 from pathlib import Path
 if __name__ == "__main__":
-    usernames = "DONJAZZY"
+    try:
+        # Create SQLAlchemy engine from environment variables
+        conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USERNAME"),
+        password=os.getenv("DB_PASS"),
+        sslmode="require")
+
+        query = "SELECT x_username FROM username_search WHERE x_username IS NOT NULL;"
+        names = pd.read_sql(query, conn)
+
+        username = (
+            names["x_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
+        
+        usernames = username.lstrip("@")
+
+        logging.info(f"Loaded {len(usernames)} usernames from database.")
     
-    x_data(usernames)
+        x_data(usernames)
+    except Exception as e:
+        logging.info(f"error reading usernames: {e}")
 

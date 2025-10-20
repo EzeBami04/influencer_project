@@ -1,10 +1,8 @@
 name: Instagram influencer
 
 on:
-  push:
-  workflow_dispatch:
   schedule:
-    - cron: "0 3 * * 1"  # runs at 03:00 every Monday
+    - cron: "0 3 * * *"  
 
 permissions:
   contents: write
@@ -14,12 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FB_TOKEN: ${{ secrets.fb_token }}
-      APP_IG: ${{ secrets.app_id }}
+      APP_ID: ${{ secrets.app_id }}
       APP_SECRET: ${{ secrets.app_secret }}
       IG_BUSINESS_ID: ${{ secrets.ig_business_id }}
       USERNAME: ${{ secrets.username }}
       PORT: ${{ secrets.port }}
       PWD: ${{ secrets.pwd }}
+      DB_HOST: ${{ secrets.db_host }}
+      DB_PORT: ${{ secrets.db_port }}
+      DB_NAME: ${{ secrets.db_name }}
+      DB_USERNAME: ${{ secrets.db_username }}
+      DB_PASSWORD: ${{ secrets.db_password }}
+
 
     steps:
       - name: Checkout code
@@ -37,7 +41,7 @@ jobs:
           pip install -r requirements.txt --no-cache-dir
 
       - name: Run pipeline
-        run: python -m infproj.inst
+        run: python insta.py
 
       - name: Configure Git
         run: |

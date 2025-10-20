@@ -2,15 +2,17 @@ import os
 
 import pandas as pd
 
+import emoji
+import psycopg2
 from psycopg2.extras import execute_values
-from sqlalchemy import text
+
 from requests.adapters import HTTPAdapter
 from requests.sessions import Session
 from urllib3.util import Retry
 from datetime import datetime
 
-from .database import connect_to_database
-from .inst import remove_emojis
+
+
 import csv
 import re
 import logging
@@ -32,6 +34,11 @@ session.mount("https://", HTTPAdapter(max_retries=retry))
 CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
 PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
 VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+def remove_emojis(text: str) -> str:
+    """Helper to strip emojis."""
+    return emoji.replace_emoji(text, replace="")
+
 
 def read_usernames(file_path):
     """Read usernames from CSV file, removing leading '@'."""
@@ -186,6 +193,19 @@ def youtube_data_pipeline(usernames, api_key, max_videos=10):
         return None
     return rows
 
+def connect_to_database():
+    try:
+        engine = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USERNAME"),
+            port=os.getenv("DB_PORT"),
+            password=os.getenv("DB_PASS"),
+            sslmode="require"
+        )
+        return engine
+    except Exception as e:
+        logging.info(f"Error connecting to Postgres database;{e}")
 def create_youtube_data_table(conn):
     """Create the YouTube data table if it doesn't exist."""
     create_table_query = """
@@ -249,9 +269,9 @@ def youtube_data(usernames):
     df['username'] = df['username'].astype(str)
     df['channel_title'] = df['channel_title'].astype(str)
     df['channel_description'] = df['channel_description'].apply(remove_emojis).replace(r"[#|@/]", ' ', regex=True)
-    df['subscriber_count'] = df['subscriber_count'].fillna(0).astype(int)
-    df['total_view_count'] = df['total_view_count'].fillna(0).astype(int)
-    df['total_video_count'] = df['total_video_count'].fillna(0).astype(int)
+    df['subscriber_count'] = df['subscriber_count'].fillna(0).astype(int).mask(df["subscriber_count"].duplicated(),0)
+    df['total_view_count'] = df['total_view_count'].fillna(0).astype(int).mask(df["total_view_count"].duplicated(),0)
+    df['total_video_count'] = df['total_video_count'].fillna(0).astype(int).mask(df["total_video_count"].duplicated(),0)
     df['uploads_playlist_id'] = df['uploads_playlist_id'].astype(str)
     df['profile_url'] = df['profile_url'].astype(str)
     df['thumbnail_url'] = df['thumbnail_url'].astype(str)
@@ -316,17 +336,25 @@ def youtube_data(usernames):
 
 import csv
 if __name__ == "__main__":
-    path = r"C:/Users/Bamidele/Desktop/inf/usernames.csv"
-    usernames = []
-    with open(path, 'r', newline='', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            username = row[0]
-            if username:
-                
-                username = username.strip()
-                if len(username) > 2: 
-                    usernames.append(username)
+    try:
+        # Create SQLAlchemy engine from environment variables
+        conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USERNAME"),
+        password=os.getenv("DB_PASS"),
+        sslmode="require")
+
+        query = "SELECT youtube_username FROM username_search WHERE youtube_username IS NOT NULL;"
+        names = pd.read_sql(query, conn)
+
+        usernames = (
+            names["youtube_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
+
+        logging.info(f"Loaded {len(usernames)} usernames from database.")
     
-    # usernames = ["patoranking", "wizkidayo"]
-    youtube_data(usernames)
+
+        youtube_data(usernames)
+    except Exception as e:
+        logging.info(f"error reading username: {e}")
