@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  run-ig_pipeline:
+  run-youtube-pipeline:
     runs-on: ubuntu-latest
     env:
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  
@@ -48,7 +48,7 @@ jobs:
           git add .
           if ! git diff --staged --quiet; then
             echo "changed=true" >> $GITHUB_ENV
-          
+          fi
 
       - name: Commit & push if changed
         if: env.changed == 'true'
