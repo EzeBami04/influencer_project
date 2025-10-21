@@ -354,16 +354,13 @@ def main(usernames: List[str]):
 if __name__ == "__main__":
     try:
         # Create SQLAlchemy engine from environment variables
-        conn = psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT"),
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USERNAME"),
-        password=os.getenv("DB_PASSWORD"),
-        sslmode="require")
+        engine = create_engine(
+            f"postgresql+psycopg2://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@"
+            f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require"
+        )
 
         query = "SELECT instagram_username FROM username_search WHERE instagram_username IS NOT NULL;"
-        names = pd.read_sql(query, conn)
+        names = pd.read_sql(query, engine)
 
         usernames = (
             names["instagram_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
