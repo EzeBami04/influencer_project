@@ -4,6 +4,7 @@ import pandas as pd
 
 import emoji
 import psycopg2
+from sqlalchemy import create_engine
 from psycopg2.extras import execute_values
 
 from requests.adapters import HTTPAdapter
