@@ -38,7 +38,7 @@ def connect_to_database():
     host = os.getenv("DB_HOST")
     database = os.getenv("DB_NAME")
     user = os.getenv("DB_USERNAME")
-    password = os.getenv("DB_PASS")
+    password = os.getenv("DB_PASSWORD")
     port = os.getenv("DB_PORT")
 
     if not all([host, database, user, password, port]):
