@@ -11,18 +11,18 @@ jobs:
   run-ig_pipeline:
     runs-on: ubuntu-latest
     env:
-      FB_TOKEN: ${{ secrets.fb_token }}
-      APP_ID: ${{ secrets.app_id }}
-      APP_SECRET: ${{ secrets.app_secret }}
-      IG_BUSINESS_ID: ${{ secrets.ig_business_id }}
-      USERNAME: ${{ secrets.username }}
-      PORT: ${{ secrets.port }}
-      PWD: ${{ secrets.pwd }}
-      DB_HOST: ${{ secrets.db_host }}
-      DB_PORT: ${{ secrets.db_port }}
-      DB_NAME: ${{ secrets.db_name }}
-      DB_USERNAME: ${{ secrets.db_username }}
-      DB_PASSWORD: ${{ secrets.db_password }}
+      FB_TOKEN: ${{ secrets.FB_TOKEN }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      IG_BUSINESS_ID: ${{ secrets.IG_BUSINESS_ID }}
+      USERNAME: ${{ secrets.USERNAME }}
+      PORT: ${{ secrets.PORT }}
+      PWD: ${{ secrets.PASSWORD }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
 
     steps:
