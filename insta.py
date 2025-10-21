@@ -317,7 +317,6 @@ def run_pipeline(usernames: List[str]):
         records = [(
             str(row["user_id"]),
             str(row["username"]),
-            str(row["post_id"]),
             str(row["name"]),
             str(row["profile_url"]),
             int(row["follower_count"]),
@@ -325,14 +324,15 @@ def run_pipeline(usernames: List[str]):
             int(row["media_count"]),
             str(row["profile_picture_url"]),
             str(row["timestamp"]),
+            str(row["post_id"]),
             str(row["post_caption"]),
             int(row["like_count"]),
             int(row["comments_count"]),
             str(row["post_media_url"]),
             str(row["post_permalink"])
         )
-        for _, row in df_cleaned.iterrows()
-        ]
+        for _, row in df_cleaned.iterrows()]
+
 
         cur.executemany(upsert_sql, records)
         conn.commit()
