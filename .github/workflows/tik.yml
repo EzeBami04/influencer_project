@@ -1,6 +1,7 @@
 name: Tiktok Influencers
 
 on:
+  push:
   schedule:
     - cron: "0 3 * * *"
 
