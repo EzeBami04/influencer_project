@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  run-ig_pipeline:
+  run-ig-pipeline:
     runs-on: ubuntu-latest
     env:
       FB_TOKEN: ${{ secrets.FB_TOKEN }}
