@@ -15,9 +15,7 @@ jobs:
       APP_ID: ${{ secrets.APP_ID }}
       APP_SECRET: ${{ secrets.APP_SECRET }}
       IG_BUSINESS_ID: ${{ secrets.IG_BUSINESS_ID }}
-      USERNAME: ${{ secrets.USERNAME }}
-      PORT: ${{ secrets.PORT }}
-      PWD: ${{ secrets.PASSWORD }}
+      
       DB_HOST: ${{ secrets.DB_HOST }}
       DB_PORT: ${{ secrets.DB_PORT }}
       DB_NAME: ${{ secrets.DB_NAME }}
