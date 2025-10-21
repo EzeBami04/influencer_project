@@ -1,6 +1,7 @@
 name: Youtube influencer
 
 on:
+  push:
   schedule:
     - cron: "0 3 * * *"
 
@@ -12,6 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
