@@ -201,7 +201,7 @@ def connect_to_database():
             database=os.getenv("DB_NAME"),
             user=os.getenv("DB_USERNAME"),
             port=os.getenv("DB_PORT"),
-            password=os.getenv("DB_PASS"),
+            password=os.getenv("DB_PASSWORD"),
             sslmode="require"
         )
         return engine
