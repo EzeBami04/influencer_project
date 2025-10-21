@@ -34,7 +34,7 @@ jobs:
           pip install -r requirements.txt --no-cache-dir
 
       - name: Run pipeline
-        run: python -m yt.py
+        run: python  yt.py
 
       - name: Configure Git
         run: |
