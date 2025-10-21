@@ -17,5 +17,6 @@ langchain
 langchain-google-community
 langchain-groq
 duckdb
+tweepy
 google-api-python-client
 emoji
