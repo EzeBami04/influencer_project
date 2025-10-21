@@ -306,7 +306,7 @@ if __name__ == "__main__":
         port=os.getenv("DB_PORT"),
         dbname=os.getenv("DB_NAME"),
         user=os.getenv("DB_USERNAME"),
-        password=os.getenv("DB_PASS"),
+        password=os.getenv("DB_PASSWORD"),
         sslmode="require")
 
         query = "SELECT tiktok_username FROM username_search WHERE tiktok_username IS NOT NULL;"
