@@ -119,7 +119,7 @@ def request_get(
 
             elif resp.status_code == 403:
                 logging.warning("403 Forbidden sleeping for 30s to 1 minute")
-                time.sleep(random.uniform(30, 60))
+                time.sleep(random.uniform(300, 600))
                 return None
 
             elif resp.status_code == 443:
