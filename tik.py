@@ -309,7 +309,7 @@ if __name__ == "__main__":
         password=os.getenv("DB_PASS"),
         sslmode="require")
 
-        query = "SELECT tiktok_username FROM username_search WHERE instagram IS NOT NULL;"
+        query = "SELECT tiktok_username FROM username_search WHERE tiktok_username IS NOT NULL;"
         names = pd.read_sql(query, conn)
 
         usernames = (
