@@ -309,7 +309,7 @@ if __name__ == "__main__":
         names = pd.read_sql(query, engine)
 
         usernames = (
-            names["tiktok"].astype(str).str.strip().str.lower().dropna().unique().tolist())
+            names["tiktok_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
 
         logging.info(f"Loaded {len(usernames)} usernames from database.")
         for users in usernames:
