@@ -303,8 +303,7 @@ if __name__ == "__main__":
         # Create SQLAlchemy engine from environment variables
         engine = create_engine(
             f"postgresql+psycopg2://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@"
-            f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require"
-        )
+            f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require")
 
         query = "SELECT tiktok_username FROM username_search WHERE tiktok_username IS NOT NULL;"
         names = pd.read_sql(query, engine)
