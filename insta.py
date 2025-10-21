@@ -24,7 +24,7 @@ logging.getLogger().setLevel(level=logging.INFO)
 
 GRAPH_API = "v23.0"
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
-ACCESS_TOKEN = os.getenv("fb_token")
+ACCESS_TOKEN = os.getenv("FB_TOKEN")
 ig_id = os.getenv("IG_BUSINESS_ID")
 
 
