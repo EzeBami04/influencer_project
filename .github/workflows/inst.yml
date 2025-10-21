@@ -13,6 +13,7 @@ jobs:
     env:
       FB_TOKEN: ${{ secrets.FB_TOKEN }}
       IG_BUSINESS_ID: ${{ secrets.IG_BUSINESS_ID }}
+      FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
       
       DB_HOST: ${{ secrets.DB_HOST }}
       DB_PORT: ${{ secrets.DB_PORT }}
