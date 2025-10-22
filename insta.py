@@ -257,6 +257,7 @@ def run_pipeline(usernames: List[str]):
     df['bio'] = df['bio'].astype(str).str.replace("/", "", regex=True)
     df['follower_count'] = (df['follower_count'].fillna(0).astype(int).mask(df["follower_count"].duplicated(),0))
     df['like_count'] = df['like_count'].fillna(0).astype(int)
+    df['media_count'] = df['media_count'].fillna(0).astype(int).mask(df['media_count'].duplicate(), 0)
     df['post_id'] = df['post_id'].astype(str)
     df['comments_count'] = df['comments_count'].fillna(0).astype(int)
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
