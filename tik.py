@@ -116,27 +116,50 @@ async def get_tiktok_profile(username):
     
     async with async_playwright() as p:
         launch_args = [
-            '--disable-blink-features=AutomationControlled',
-            '--disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees',
-            '--disable-extensions',
-            '--disable-popup-blocking',
-            '--disable-sync',
-            '--no-sandbox',
+            '--disable-gpu',
             '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+            '--no-sandbox',
+            '--disable-blink-features=AutomationControlled',
             '--disable-infobars',
-            '--window-size=1366,768'
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-client-side-phishing-detection',
+            '--disable-component-update',
+            '--disable-default-apps',
+            '--disable-features=IsolateOrigins,site-per-process,TranslateUI',
+            '--disable-hang-monitor',
+            '--disable-popup-blocking',
+            '--disable-prompt-on-repost',
+            '--disable-renderer-backgrounding',
+            '--disable-sync',
+            '--hide-scrollbars',
+            '--mute-audio',
+            '--window-size=1366,768',
         ]
-
 
         browser = await p.chromium.launch(headless=True,
                                           args=launch_args)
         context = await browser.new_context(
             user_agent=random.choice(user_agents),
-            viewport={"width": 1366, "height": 768},
-            locale="en-US",
-            timezone_id="Africa/Lagos",
-        )
-        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+            viewport={"width": random.randint(1280, 1920), "height": random.randint(720, 1080)},
+            locale=random.choice(["en-US", "en-GB", "en-NG", "en-CA"]),
+            timezone_id=random.choice(["America/New_York", "Africa/Lagos", "Europe/London"]),
+            geolocation={
+                "longitude": random.uniform(-74.0, 3.4),
+                "latitude": random.uniform(40.7, 6.5)
+            },
+            permissions=["geolocation"])
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            window.chrome = { runtime: {} };
+        """)
 
         page = await context.new_page()
 
@@ -162,9 +185,8 @@ async def get_tiktok_profile(username):
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
 
-            followers_tag = soup.find("span", string=re.compile("Followers")) 
-
-            followers = extract_number(followers_tag.text) if followers_tag else 0 
+            followers_tag = soup.find("strong", {"data-e2e": "followers-count"})
+            followers = extract_number(followers_tag.text) if followers_tag else 0
             likes_tag = soup.find("strong", {"data-e2e": "likes-count"}) 
             total_likes = extract_number(likes_tag.text) if likes_tag else 0 
             bio_tag = soup.find("h2", {"data-e2e": "user-bio"}) 
@@ -223,7 +245,8 @@ def process_load(username):
     df["username"] = df["username"].astype(str).fillna("no screen name").apply(lambda x: x.lower())
     df["profile_url"] = df["profile_url"].astype(str).fillna("")
     df['followers'] = (df['followers'].fillna(0).astype(int).mask(df["followers"].duplicated(),0))
-    df['followers'] = df[df['followers'] >= 50000]
+    print(df["followers"])
+    df = df[df['followers'] >= 50000].copy()
     df["total_likes"] = df["total_likes"].astype(int).mask(df["total_likes"].duplicated(), 0)
     df["bio"] = df["bio"].apply(remove_emojis).astype(str).fillna(" ")
     df["video_url"] = df["video_url"].astype(str)
@@ -231,7 +254,7 @@ def process_load(username):
     df["video_id"] = df["video_id"].astype(str).fillna("none")
 
     logging.info(f"{df.dtypes}")
-
+                    
     records = [
             (
                 str(row["username"]),
@@ -304,11 +327,12 @@ if __name__ == "__main__":
             f"postgresql+psycopg2://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@"
             f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require")
 
-        query = "SELECT tiktok_username FROM username_search WHERE tiktok_username IS NOT NULL;"
+        query = "SELECT tiktok_username AS username FROM username_search WHERE tiktok_username IS NOT NULL;"
+
         names = pd.read_sql(query, engine)
 
         usernames = (
-            names["tiktok_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
+            names["username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
 
         logging.info(f"Loaded {len(usernames)} usernames from database.")
         for users in usernames:
