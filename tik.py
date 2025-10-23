@@ -150,7 +150,7 @@ async def get_tiktok_profile(username):
             locale=random.choice(["en-US", "en-GB", "en-NG", "en-CA"]),
             timezone_id=random.choice(["America/New_York", "Africa/Lagos", "Europe/London"]),
             geolocation={
-                "longitude": random.uniform(-74.0, 3.4),  # Random between US and Nigeria
+                "longitude": random.uniform(-74.0, 3.4),
                 "latitude": random.uniform(40.7, 6.5)
             },
             permissions=["geolocation"])
@@ -185,8 +185,8 @@ async def get_tiktok_profile(username):
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
 
-            followers_tag = soup.select_one('span[data-e2e*="followers"]') or soup.find("span", string=re.compile("Followers")) 
-            
+            followers_tag = soup.find("span", string=re.compile("Followers")) 
+
             followers = extract_number(followers_tag.text) if followers_tag else 0 
             likes_tag = soup.find("strong", {"data-e2e": "likes-count"}) 
             total_likes = extract_number(likes_tag.text) if likes_tag else 0 
@@ -202,8 +202,10 @@ async def get_tiktok_profile(username):
                 if video_url and f"/@{username}/video" in video_url: 
                     videos_data.append({"username": username, 
                                         "profile_url": f"https://www.tiktok.com/@{username}", 
-                                        "followers": followers, "total_likes": total_likes, 
-                                        "bio": bio, "video_id": re.search(r"/video/(\d+)", video_url).group(1) if re.search(r"/video/(\d+)", video_url) else None, 
+                                        "followers": followers, 
+                                        "total_likes": total_likes, 
+                                        "bio": bio, 
+                                        "video_id": re.search(r"/video/(\d+)", video_url).group(1) if re.search(r"/video/(\d+)", video_url) else None,
                                         "video_url": video_url, 
                                         "video_views": views })
             await asyncio.sleep(random.randint(5, 10))
@@ -282,7 +284,7 @@ def process_load(username):
                     video_id VARCHAR(100) NOT NULL,
                     video_url TEXT,
                     video_views INT,
-                    PRIMARY KEY (username, video_id)
+                    PRIMARY KEY (video_id)
                     );
                     """
                 )
@@ -292,7 +294,9 @@ def process_load(username):
                 upsert_stmt = """
                     INSERT INTO influencer_tiktok (username, profile_url, followers, total_likes, bio, video_id, video_url, video_views)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (username, video_id) DO UPDATE SET
+                    ON CONFLICT (video_id) DO UPDATE SET
+                        username = EXCLUDED.username,
+                        video_id = EXCLUDED.video_id,
                         profile_url = EXCLUDED.profile_url,
                         followers = EXCLUDED.followers,
                         total_likes = EXCLUDED.total_likes,
