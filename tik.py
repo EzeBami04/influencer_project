@@ -116,50 +116,28 @@ async def get_tiktok_profile(username):
     
     async with async_playwright() as p:
         launch_args = [
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--disable-setuid-sandbox',
-            '--no-sandbox',
             '--disable-blink-features=AutomationControlled',
-            '--disable-infobars',
-            '--no-first-run',
-            '--no-default-browser-check',
+            '--disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees',
             '--disable-extensions',
-            '--disable-background-networking',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-client-side-phishing-detection',
-            '--disable-component-update',
-            '--disable-default-apps',
-            '--disable-features=IsolateOrigins,site-per-process,TranslateUI',
-            '--disable-hang-monitor',
             '--disable-popup-blocking',
-            '--disable-prompt-on-repost',
-            '--disable-renderer-backgrounding',
             '--disable-sync',
-            '--hide-scrollbars',
-            '--mute-audio',
-            '--window-size=1366,768',
+            '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-infobars',
+            '--window-size=1366,768'
         ]
+
 
         browser = await p.chromium.launch(headless=True,
                                           args=launch_args)
         context = await browser.new_context(
             user_agent=random.choice(user_agents),
-            viewport={"width": random.randint(1280, 1920), "height": random.randint(720, 1080)},
-            locale=random.choice(["en-US", "en-GB", "en-NG", "en-CA"]),
-            timezone_id=random.choice(["America/New_York", "Africa/Lagos", "Europe/London"]),
-            geolocation={
-                "longitude": random.uniform(-74.0, 3.4),
-                "latitude": random.uniform(40.7, 6.5)
-            },
-            permissions=["geolocation"])
-        await context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            window.chrome = { runtime: {} };
-        """)
+            viewport={"width": 1366, "height": 768},
+            locale="en-US",
+            timezone_id="Africa/Lagos",
+        )
+        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+
 
         page = await context.new_page()
 
