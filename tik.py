@@ -126,34 +126,46 @@ async def get_tiktok_profile(username):
             '--no-default-browser-check',
             '--disable-extensions',
             '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-client-side-phishing-detection',
+            '--disable-component-update',
+            '--disable-default-apps',
+            '--disable-features=IsolateOrigins,site-per-process,TranslateUI',
+            '--disable-hang-monitor',
+            '--disable-popup-blocking',
+            '--disable-prompt-on-repost',
+            '--disable-renderer-backgrounding',
+            '--disable-sync',
+            '--hide-scrollbars',
             '--mute-audio',
-            '--hide-scrollbars'
+            '--window-size=1366,768',
         ]
+
         browser = await p.chromium.launch(headless=True,
                                           args=launch_args)
         context = await browser.new_context(
             user_agent=random.choice(user_agents),
             viewport={"width": random.randint(1280, 1920), "height": random.randint(720, 1080)},
-            locale='en-NG')
-        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            locale=random.choice(["en-US", "en-GB", "en-NG", "en-CA"]),
+            timezone_id=random.choice(["America/New_York", "Africa/Lagos", "Europe/London"]),
+            geolocation={
+                "longitude": random.uniform(-74.0, 3.4),  # Random between US and Nigeria
+                "latitude": random.uniform(40.7, 6.5)
+            },
+            permissions=["geolocation"])
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            window.chrome = { runtime: {} };
+        """)
 
         page = await context.new_page()
 
         try:
             url = f"https://www.tiktok.com/@{username}"
             await page.goto(url, timeout=60000)
-
-            for attempt in range(2):
-                try:
-                    await page.wait_for_selector('a[href*="/video/"]', timeout=30000)
-                    break
-                except:
-                    if attempt == 0:
-                        logging.info("Retrying once...")
-                        await asyncio.sleep(10)
-                    else:
-                        logging.warning(f"No videos found for @{username}")
-
 
             try:
                 await page.locator("button:has-text('Allow all')").click(timeout=5000)
@@ -171,38 +183,29 @@ async def get_tiktok_profile(username):
             await asyncio.sleep(3)
 
             html = await page.content()
-            # with open(f"tiktok_{username}.html", "w", encoding="utf-8") as f:
-            #     f.write(html)
             soup = BeautifulSoup(html, "html.parser")
 
-            followers_tag = soup.select_one('span[data-e2e*="followers"]') or soup.find("span", string=re.compile("Followers"))
+            followers_tag = soup.select_one('span[data-e2e*="followers"]') or soup.find("span", string=re.compile("Followers")) 
+            
+            followers = extract_number(followers_tag.text) if followers_tag else 0 
+            likes_tag = soup.find("strong", {"data-e2e": "likes-count"}) 
+            total_likes = extract_number(likes_tag.text) if likes_tag else 0 
+            bio_tag = soup.find("h2", {"data-e2e": "user-bio"}) 
+            bio = bio_tag.text.strip() if bio_tag else "" 
 
-            followers = extract_number(followers_tag.text) if followers_tag else 0
-
-            likes_tag = soup.find("strong", {"data-e2e": "likes-count"})
-            total_likes = extract_number(likes_tag.text) if likes_tag else 0
-
-            bio_tag = soup.find("h2", {"data-e2e": "user-bio"})
-            bio = bio_tag.text.strip() if bio_tag else ""
-
-            videos_data = []
-            for block in soup.find_all("div", {"data-e2e": "user-post-item"})[:10]:
-                a_tag = block.find("a", href=True)
-                video_url = a_tag["href"] if a_tag else None
-                view_tag = block.find("strong", {"data-e2e": "video-views"})
-                views = extract_number(view_tag.text) if view_tag else 0
-
-                if video_url and f"/@{username}/video" in video_url:
-                    videos_data.append({
-                        "username": username,
-                        "profile_url": f"https://www.tiktok.com/@{username}",
-                        "followers": followers,
-                        "total_likes": total_likes,
-                        "bio": bio,
-                        "video_id": re.search(r"/video/(\d+)", video_url).group(1) if re.search(r"/video/(\d+)", video_url) else None, 
-                        "video_url": video_url,
-                        "video_views": views
-                    })
+            videos_data = [] 
+            for block in soup.find_all("div", {"data-e2e": "user-post-item"})[:10]: 
+                a_tag = block.find("a", href=True) 
+                video_url = a_tag["href"] if a_tag else None 
+                view_tag = block.find("strong", {"data-e2e": "video-views"}) 
+                views = extract_number(view_tag.text) if view_tag else 0 
+                if video_url and f"/@{username}/video" in video_url: 
+                    videos_data.append({"username": username, 
+                                        "profile_url": f"https://www.tiktok.com/@{username}", 
+                                        "followers": followers, "total_likes": total_likes, 
+                                        "bio": bio, "video_id": re.search(r"/video/(\d+)", video_url).group(1) if re.search(r"/video/(\d+)", video_url) else None, 
+                                        "video_url": video_url, 
+                                        "video_views": views })
             await asyncio.sleep(random.randint(5, 10))
 
             await browser.close()
