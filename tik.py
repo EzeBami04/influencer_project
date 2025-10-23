@@ -129,22 +129,12 @@ async def get_tiktok_profile(username):
             '--mute-audio',
             '--hide-scrollbars'
         ]
-
-        locale =[
-        {"locale": "en-NG", "timezone": "Africa/Lagos",   "accept_language": "en-NG,en;q=0.9,en-US;q=0.8"},
-        {"locale": "en-US", "timezone": "America/New_York", "accept_language": "en-US,en;q=0.9"},
-        {"locale": "en-GB", "timezone": "Europe/London",  "accept_language": "en-GB,en;q=0.9"},
-        {"locale": "pt-BR", "timezone": "America/Sao_Paulo","accept_language": "pt-BR,pt;q=0.9"}
-        ]
-        # === Rotate Location
-        rot_location = random.choice(locale)
         browser = await p.chromium.launch(headless=True,
                                           args=launch_args)
         context = await browser.new_context(
             user_agent=random.choice(user_agents),
             viewport={"width": random.randint(1280, 1920), "height": random.randint(720, 1080)},
-            locale=rot_location['locale'],
-            timezone_id=rot_location['timezone'])
+            locale='en-NG')
         await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         page = await context.new_page()
@@ -251,12 +241,12 @@ def process_load(username):
     df["username"] = df["username"].astype(str).fillna("no screen name").apply(lambda x: x.lower())
     df["profile_url"] = df["profile_url"].astype(str).fillna("")
     df['followers'] = (df['followers'].fillna(0).astype(int).mask(df["followers"].duplicated(),0))
+    df['followers'] = df[df['followers'] >= 50000]
     df["total_likes"] = df["total_likes"].astype(int).mask(df["total_likes"].duplicated(), 0)
     df["bio"] = df["bio"].apply(remove_emojis).astype(str).fillna(" ")
     df["video_url"] = df["video_url"].astype(str)
     df["video_views"] = df["video_views"].astype(int).fillna(0)
     df["video_id"] = df["video_id"].astype(str).fillna("none")
-    df['followers'] = df[df['followers'] >= 50000]
 
     logging.info(f"{df.dtypes}")
 
