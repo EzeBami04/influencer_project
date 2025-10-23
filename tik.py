@@ -256,7 +256,7 @@ def process_load(username):
     df["video_url"] = df["video_url"].astype(str)
     df["video_views"] = df["video_views"].astype(int).fillna(0)
     df["video_id"] = df["video_id"].astype(str).fillna("none")
-    df = df[df['followers'] >= 50000]
+    df['followers'] = df[df['followers'] >= 50000]
 
     logging.info(f"{df.dtypes}")
 
