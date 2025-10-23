@@ -4,6 +4,7 @@ import psycopg2
 from sqlalchemy import create_engine
 
 
+
 import emoji
 import asyncio
 import random
@@ -12,7 +13,7 @@ import re
 
 
 import time
-import json
+
 
 
 from dotenv import load_dotenv
@@ -22,6 +23,11 @@ import pandas as pd
 # ============================================ Config ===========================================================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 load_dotenv()
+
+def get_env(text:str):
+    return os.getenv(text)
+
+
 
 def remove_emojis(text: str) -> str:
     return emoji.replace_emoji(text, replace="")
@@ -109,18 +115,36 @@ async def get_tiktok_profile(username):
     logging.info(f"Fetching TikTok profile for @{username} ...")
     
     async with async_playwright() as p:
+        launch_args = [
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+            '--no-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-infobars',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--mute-audio',
+            '--hide-scrollbars'
+        ]
+
+        locale =[
+        {"locale": "en-NG", "timezone": "Africa/Lagos",   "accept_language": "en-NG,en;q=0.9,en-US;q=0.8"},
+        {"locale": "en-US", "timezone": "America/New_York", "accept_language": "en-US,en;q=0.9"},
+        {"locale": "en-GB", "timezone": "Europe/London",  "accept_language": "en-GB,en;q=0.9"},
+        {"locale": "pt-BR", "timezone": "America/Sao_Paulo","accept_language": "pt-BR,pt;q=0.9"}
+        ]
+        # === Rotate Location
+        rot_location = random.choice(locale)
         browser = await p.chromium.launch(headless=True,
-                                          args=[
-                                              '--disable-gpu',
-                                              '--disable-dev-shm-usage',
-                                              '--disable-setuid-sandbox',
-                                              '--no-sandbox'
-                                              
-                                          ])
+                                          args=launch_args)
         context = await browser.new_context(
             user_agent=random.choice(user_agents),
             viewport={"width": random.randint(1280, 1920), "height": random.randint(720, 1080)},
-            locale="en-US",)
+            locale=rot_location['locale'],
+            timezone_id=rot_location['timezone'])
         await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         page = await context.new_page()
@@ -298,6 +322,7 @@ def process_load(username):
   
 # ============ Test Run ============
 if __name__ == "__main__":
+
     
     try:
         # Create SQLAlchemy engine from environment variables
@@ -317,4 +342,3 @@ if __name__ == "__main__":
             time.sleep(random.randint(5, 10))
     except Exception as e:
         logging.info(f"error reading username: {e}")
-        
