@@ -300,7 +300,7 @@ def run_pipeline(usernames: List[str]):
             user_id, username, name, profile_url, follower_count, bio, media_count,
             profile_picture_url, timestamp, post_id, post_caption, like_count, comments_count, post_media_url, post_permalink
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (user_id, post_id) DO UPDATE SET
+        ON CONFLICT (user_id, post_id, username) DO UPDATE SET
             name = EXCLUDED.name,
             profile_url = EXCLUDED.profile_url,
             follower_count = EXCLUDED.follower_count,
