@@ -318,9 +318,9 @@ def run_pipeline(usernames: List[str]):
         """)
         # Upsert user data
         upsert_user_sql = """
-        INSERT INTO insta_user_data(
-            user_id, username, name, 
-            profile_url, follower_count, bio, media_count, profile_picture_url
+            INSERT INTO insta_user_data(
+                user_id, username, name, 
+                profile_url, follower_count, bio, media_count, profile_picture_url
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE SET
                 username = EXCLUDED.username,
@@ -329,8 +329,9 @@ def run_pipeline(usernames: List[str]):
                 follower_count = EXCLUDED.follower_count,
                 bio = EXCLUDED.bio,
                 media_count = EXCLUDED.media_count,
-                profile_picture_url = EXCLUDED.profile_picture_url,     
-        """
+                profile_picture_url = EXCLUDED.profile_picture_url;
+            """
+
         # Post_upsert query
 
         upsert_post_sql = """
@@ -360,15 +361,17 @@ def run_pipeline(usernames: List[str]):
         )
         for _, row in df_cleaned.iterrows()
         ]
-        post_records = [(
+       post_records = [(
             str(row["post_id"]),
-            str(row["timestamp"]),
             str(row["post_caption"]),
             int(row["like_count"]),
             int(row["comments_count"]),
+            row["timestamp"],
             str(row["post_media_url"]),
-            str(row["post_permalink"]))
-            for _, row in df_cleaned.iterrows()]
+            str(row["post_permalink"]),
+            str(row["user_id"])
+        ) for _, row in df_cleaned.iterrows()]
+
         
         cur.executemany(upsert_user_sql, user_records)
         cur.executemany(upsert_post_sql, post_records)
