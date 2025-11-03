@@ -24,7 +24,7 @@ logging.getLogger().setLevel(level=logging.INFO)
 
 GRAPH_API = "v23.0"
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
-ACCESS_TOKEN = os.getenv("FB_TOKEN")
+ACCESS_TOKEN = os.getenv("fb_token")
 ig_id = os.getenv("IG_BUSINESS_ID")
 
 
@@ -38,7 +38,7 @@ def connect_to_database():
     host = os.getenv("DB_HOST")
     database = os.getenv("DB_NAME")
     user = os.getenv("DB_USERNAME")
-    password = os.getenv("DB_PASSWORD")
+    password = os.getenv("DB_PASS")
     port = os.getenv("DB_PORT")
 
     if not all([host, database, user, password, port]):
@@ -89,7 +89,7 @@ def request_get(
     url: str,
     params: dict,
     timeout: float = 30.0,
-    max_retries: int = 3,
+    max_retries: int = 2,
     backoff_factor: float = 1.5,) -> Optional[dict]:
     """Simple GET with retry/backoff using requests."""
     headers = {
@@ -114,7 +114,7 @@ def request_get(
 
             elif resp.status_code in (429, 500, 502, 503, 504):
                 logging.warning(f"Retrying ({attempt}/{max_retries}) after status {resp.status_code}")
-                time.sleep(random.uniform(240, 600))
+                time.sleep(random.uniform(600, 900))
                 continue
 
             elif resp.status_code == 403:
@@ -243,7 +243,7 @@ def run_pipeline(usernames: List[str]):
     all_rows = []
     for u in usernames:
         all_rows.extend(process_user(ig_business_id, u))
-        time.sleep(random.uniform(2, 4))  # jitter between calls
+        time.sleep(random.uniform(2, 4))
 
     if not all_rows:
         logging.info("No influencer rows to write.")
@@ -255,11 +255,11 @@ def run_pipeline(usernames: List[str]):
 
     # Clean data
     df['bio'] = df['bio'].astype(str).str.replace("/", "", regex=True)
-    df['follower_count'] = (df['follower_count'].fillna(0).astype(int).mask(df["follower_count"].duplicated(),0))
+    df['follower_count'] = df['follower_count'].fillna(0).astype(int)
     df['like_count'] = df['like_count'].fillna(0).astype(int)
-    df['media_count'] = (df['media_count'].fillna(0).astype(int).mask(df['media_count'].duplicated(), 0))
     df['post_id'] = df['post_id'].astype(str)
     df['comments_count'] = df['comments_count'].fillna(0).astype(int)
+    df['media_count'] = df['media_count'].fillna(0).astype(int)
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df['profile_picture_url'] = df['profile_picture_url'].astype(str).str.rstrip("/")
     df['post_media_url'] = df['post_media_url'].astype(str).str.rstrip("/")
@@ -279,43 +279,76 @@ def run_pipeline(usernames: List[str]):
             post_caption, like_count, comments_count, post_media_url, post_permalink
         FROM df
     """).fetchdf()
-
+    # Breaking up the table into user data table and post table 
+    df_user = df_cleaned[["user_id", "username", "name", "bio", "profile_url", "follower_count", "media_count"]]
+    df_posts = df_cleaned[["user_id", "post_id", "post_caption", 
+                           "like_count", "comments_count", "timestamp", "post_media_url", "post_permalink"]]
     # Write to Postgres
     conn = connect_to_database()
     if not conn:
         return
     try:
         cur = conn.cursor()
+        # user table
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS influencer_instagram(
-                user_id TEXT NOT NULL, username VARCHAR(100) NOT NULL, name VARCHAR(100), profile_url TEXT,
+            CREATE TABLE IF NOT EXISTS insta_user_data(
+                user_id TEXT NOT NULL,
+                username VARCHAR(100) NOT NULL, 
+                name VARCHAR(100),
+                name VARCHAR(100), profile_url TEXT,
                 follower_count BIGINT, bio TEXT, media_count INT,
-                profile_picture_url TEXT, timestamp TIMESTAMP, post_id TEXT NOT NULL,
-                post_caption TEXT, like_count INT, comments_count INT, post_media_url TEXT, post_permalink TEXT,
-                PRIMARY KEY(user_id, post_id, username)
+                profile_picture_url TEXT,
+                PRIMARY KEY(user_id)
             );
         """)
-        upsert_sql = """
-        INSERT INTO influencer_instagram (
-            user_id, username, name, profile_url, follower_count, bio, media_count,
-            profile_picture_url, timestamp, post_id, post_caption, like_count, comments_count, post_media_url, post_permalink
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (user_id, post_id, username) DO UPDATE SET
-            name = EXCLUDED.name,
-            profile_url = EXCLUDED.profile_url,
-            follower_count = EXCLUDED.follower_count,
-            bio = EXCLUDED.bio,
-            media_count = EXCLUDED.media_count,
-            profile_picture_url = EXCLUDED.profile_picture_url,
-            timestamp = EXCLUDED.timestamp,
-            post_id = EXCLUDED.post_id,
+
+        # Post table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS insta_post_data(
+                    post_id TEXT NOT NULL,
+                    post_caption TEXT,
+                    like_count BIGINT,
+                    comments_count BIGINT,
+                    timestamp TIMESTAMP,
+                    post_media_url TEXT,
+                    post_permalink TEXT,
+                    user_id TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES insta_user_data(user_id),
+                    PRIMARY KEY(post_id)
+            );
+        """)
+        # Upsert user data
+        upsert_user_sql = """
+        INSERT INTO insta_user_data(
+            user_id, username, name, 
+            profile_url, follower_count, bio, media_count, profile_picture_url
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                username = EXCLUDED.username,
+                name = EXCLUDED.name,
+                profile_url = EXCLUDED.profile_url,
+                follower_count = EXCLUDED.follower_count,
+                bio = EXCLUDED.bio,
+                media_count = EXCLUDED.media_count,
+                profile_picture_url = EXCLUDED.profile_picture_url,     
+        """
+        # Post_upsert query
+
+        upsert_post_sql = """
+        INSERT INTO insta_post_data(
+            post_id, post_caption, like_count, comments_count, timestamp, post_media_url, post_permalink, user_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (post_id) DO UPDATE SET
             post_caption = EXCLUDED.post_caption,
             like_count = EXCLUDED.like_count,
             comments_count = EXCLUDED.comments_count,
+            timestamp = EXCLUDED.timestamp,
             post_media_url = EXCLUDED.post_media_url,
-            post_permalink = EXCLUDED.post_permalink;
+            post_permalink = EXCLUDED.post_permalink,
+            user_id = EXCLUDED.user_id
         """
-        records = [(
+
+        user_records = [(
             str(row["user_id"]),
             str(row["username"]),
             str(row["name"]),
@@ -324,18 +357,22 @@ def run_pipeline(usernames: List[str]):
             str(row["bio"]),
             int(row["media_count"]),
             str(row["profile_picture_url"]),
-            str(row["timestamp"]),
+            
+        )
+        for _, row in df_cleaned.iterrows()
+        ]
+        post_records = [(
             str(row["post_id"]),
+            str(row["timestamp"]),
             str(row["post_caption"]),
             int(row["like_count"]),
             int(row["comments_count"]),
             str(row["post_media_url"]),
-            str(row["post_permalink"])
-        )
-        for _, row in df_cleaned.iterrows()]
-
-
-        cur.executemany(upsert_sql, records)
+            str(row["post_permalink"]))
+            for _, row in df_cleaned.iterrows()]
+        
+        cur.executemany(upsert_user_sql, user_records)
+        cur.executemany(upsert_post_sql, post_records)
         conn.commit()
         logging.info(f"Upserted {len(df_cleaned)} rows into influencer_instagram.")
     except Exception as e:
@@ -355,13 +392,16 @@ def main(usernames: List[str]):
 if __name__ == "__main__":
     try:
         # Create SQLAlchemy engine from environment variables
-        engine = create_engine(
-            f"postgresql+psycopg2://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@"
-            f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require"
-        )
+        conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USERNAME"),
+        password=os.getenv("DB_PASS"),
+        sslmode="require")
 
         query = "SELECT instagram_username FROM username_search WHERE instagram_username IS NOT NULL;"
-        names = pd.read_sql(query, engine)
+        names = pd.read_sql(query, conn)
 
         usernames = (
             names["instagram_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
