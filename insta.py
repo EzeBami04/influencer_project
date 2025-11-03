@@ -294,7 +294,6 @@ def run_pipeline(usernames: List[str]):
             CREATE TABLE IF NOT EXISTS insta_user_data(
                 user_id TEXT NOT NULL,
                 username VARCHAR(100) NOT NULL, 
-                name VARCHAR(100),
                 name VARCHAR(100), profile_url TEXT,
                 follower_count BIGINT, bio TEXT, media_count INT,
                 profile_picture_url TEXT,
