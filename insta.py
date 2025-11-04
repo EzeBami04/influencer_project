@@ -347,7 +347,6 @@ def run_pipeline(usernames: List[str]):
             post_permalink = EXCLUDED.post_permalink,
             user_id = EXCLUDED.user_id
         """
-
         user_records = [(
             str(row["user_id"]),
             str(row["username"]),
@@ -357,20 +356,19 @@ def run_pipeline(usernames: List[str]):
             str(row["bio"]),
             int(row["media_count"]),
             str(row["profile_picture_url"]),
-            
-        )
-        for _, row in df_cleaned.iterrows()
-        ]
-       post_records = [(
-           str(row["post_id"]),
-           str(row["post_caption"]),
-           int(row["like_count"]),
-           int(row["comments_count"]),
-           row["timestamp"],
-           str(row["post_media_url"]),
-           str(row["post_permalink"]),
-           str(row["user_id"])
-       ) for _, row in df_cleaned.iterrows()]
+        ) for _, row in df_cleaned.iterrows()]
+
+        post_records = [(
+            str(row["post_id"]),
+            str(row["post_caption"]),
+            int(row["like_count"]),
+            int(row["comments_count"]),
+            row["timestamp"],
+            str(row["post_media_url"]),
+            str(row["post_permalink"]),
+            str(row["user_id"])
+        ) for _, row in df_cleaned.iterrows()]
+
 
         
         cur.executemany(upsert_user_sql, user_records)
