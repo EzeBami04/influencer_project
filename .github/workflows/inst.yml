@@ -1,7 +1,6 @@
 name: Instagram influencer
 
 on:
-  push:
   schedule:
     - cron: "0 3 * * *"  
 
