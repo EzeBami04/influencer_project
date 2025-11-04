@@ -1,6 +1,7 @@
 name: influencer_Search
 
 on:
+  push:
   schedule:
     - cron: "0 1 1,15 * *"
 
