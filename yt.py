@@ -251,32 +251,35 @@ def youtube_data(usernames):
     df_user = df[["channel_id", "username", "channel_title", "channel_description", "subscriber_count",
     "total_view_count", "total_video_count",  "uploads_playlist_id","channel_created_at", "profile_url", "thumbnail_url"]]
 
-    df_posts = df[["video_id", "video_title", "video_description", "video_published_at",
+    df_posts = df[["channel_id","video_id", "video_title", "video_description", "video_published_at",
     "video_url", "video_views", "video_likes", "video_comments", "created_at", "updated_at"]]
 
     # Convert DataFrame to list of tuples
-    user_records = [(row[str("channel_id")],
-                     row[str("username")],
-                     row[str("channel_title")],
-                     row[str("channel_description")],
-                     row[str("subscriber_count")],
-                     row[str("total_view_count")],
-                     row[str("total_video_count")],
-                     row[str("uploads_playlist_id")],
-                     row[str("channel_created_at")],
-                     row[str("profile_url")],
-                     row[str("thumbnail_url")]) for _,row in df_user.iterrows()]
+    user_records = [(
+        row[str("channel_id")],
+        row[str("username")],
+        row[str("channel_title")],
+        row[str("channel_description")],
+        row[str("subscriber_count")],
+        row[str("total_view_count")],
+        row[str("total_video_count")],
+        row[str("uploads_playlist_id")],
+        row[str("channel_created_at")],
+        row[str("profile_url")],
+        row[str("thumbnail_url")]) for _,row in df_user.iterrows()]
 
-    post_records = [(row[str("video_id")],
-                     row[str("video_title")],
-                     row[str("video_description")],
-                     row[str("video_published_at")],
-                     row[str("video_url")],
-                     row[str("video_views")],
-                     row[str("video_likes")],
-                     row[str("video_comments")],
-                     row[str("created_at")],
-                     row[str("updated_at")]) for _,row in df_posts.iterrows()]
+    post_records = [(
+        row[str("channel_id")],
+        row[str("video_id")],
+        row[str("video_title")],
+        row[str("video_description")],
+        row[str("video_published_at")],
+        row[str("video_url")],
+        row[str("video_views")],
+        row[str("video_likes")],
+        row[str("video_comments")],
+        row[str("created_at")],
+        row[str("updated_at")]) for _,row in df_posts.iterrows()]
 
     engine = connect_to_database()
     
@@ -349,7 +352,7 @@ def youtube_data(usernames):
                 INSERT INTO youtube_post_data(channel_id, video_id, video_title, video_description, video_published_at, 
                 video_url, video_views, video_likes, video_comments, created_at, updated_at)
                 VALUES ({', '.join(['%s'] * 11)})
-                ON CONFLICT (channel_id, video_id) 
+                ON CONFLICT (video_id) 
                 DO UPDATE  SET 
                     channel_id = EXCLUDED.channel_id,
                     video_id = EXCLUDED.video_id,
