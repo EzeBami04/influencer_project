@@ -1,10 +1,10 @@
 import os
 
 import pandas as pd
+import requests
 
 import emoji
 import psycopg2
-from sqlalchemy import create_engine
 from psycopg2.extras import execute_values
 
 from requests.adapters import HTTPAdapter
@@ -62,11 +62,11 @@ def get_channel_details(username, api_key):
     """Fetch channel details from YouTube API."""
     params = {
         "part": "snippet,contentDetails,statistics",
-        "forHandle": username,
+        "forHandle": f"@{username}",
         "key": api_key
     }
     try:
-        res = session.get(CHANNELS_URL, params=params)
+        res = requests.get(CHANNELS_URL, params=params)
         logging.info(f"Fetching channel details for {username}, Status: {res.status_code}")
         if res.status_code == 200:
             data = res.json()
@@ -207,47 +207,6 @@ def connect_to_database():
         return engine
     except Exception as e:
         logging.info(f"Error connecting to Postgres database;{e}")
-def create_youtube_data_table(conn):
-    """Create the YouTube data table if it doesn't exist."""
-    create_table_query = """
-    CREATE TABLE IF NOT EXISTS influencer_youtube (
-        id SERIAL PRIMARY KEY,
-        channel_id VARCHAR(100) NOT NULL,
-        username VARCHAR(100) NOT NULL,
-        channel_title TEXT,
-        channel_description TEXT,
-        subscriber_count BIGINT,
-        total_view_count BIGINT,
-        total_video_count BIGINT,
-        uploads_playlist_id VARCHAR(100),
-        channel_created_at TIMESTAMP,
-        profile_url VARCHAR(255),
-        thumbnail_url VARCHAR(255),
-        video_id VARCHAR(100),
-        video_title TEXT,
-        video_description TEXT,
-        video_published_at TIMESTAMP,
-        video_url VARCHAR(255),
-        video_views BIGINT,
-        video_likes BIGINT,
-        video_comments BIGINT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (channel_id, video_id)
-    );
-    """
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(create_table_query)
-            conn.commit()
-        logging.info("YouTube data table created or already exists")
-    except Exception as e:
-        logging.error(f"Error creating table: {e}")
-        conn.rollback()
-
-
-# usernames = run
-from psycopg2.extras import execute_values
 
 def youtube_data(usernames):
     """Main execution function."""
@@ -270,9 +229,9 @@ def youtube_data(usernames):
     df['username'] = df['username'].astype(str)
     df['channel_title'] = df['channel_title'].astype(str)
     df['channel_description'] = df['channel_description'].apply(remove_emojis).replace(r"[#|@/]", ' ', regex=True)
-    df['subscriber_count'] = df['subscriber_count'].fillna(0).astype(int).mask(df["subscriber_count"].duplicated(),0)
-    df['total_view_count'] = df['total_view_count'].fillna(0).astype(int).mask(df["total_view_count"].duplicated(),0)
-    df['total_video_count'] = df['total_video_count'].fillna(0).astype(int).mask(df["total_video_count"].duplicated(),0)
+    df['subscriber_count'] = df['subscriber_count'].fillna(0).astype(int)
+    df['total_view_count'] = df['total_view_count'].fillna(0).astype(int)
+    df['total_video_count'] = df['total_video_count'].fillna(0).astype(int)
     df['uploads_playlist_id'] = df['uploads_playlist_id'].astype(str)
     df['profile_url'] = df['profile_url'].astype(str)
     df['thumbnail_url'] = df['thumbnail_url'].astype(str)
@@ -287,34 +246,112 @@ def youtube_data(usernames):
     df['created_at'] = pd.to_datetime(df['created_at'], errors="coerce")
     df['updated_at'] = pd.to_datetime(df['updated_at'], errors="coerce")
 
+    #=== Partiton table Into user and posts tables ======
+
+    df_user = df[["channel_id", "username", "channel_title", "channel_description", "subscriber_count",
+    "total_view_count", "total_video_count",  "uploads_playlist_id","channel_created_at", "profile_url", "thumbnail_url"]]
+
+    df_posts = df[["video_id", "video_title", "video_description", "video_published_at",
+    "video_url", "video_views", "video_likes", "video_comments", "created_at", "updated_at"]]
+
     # Convert DataFrame to list of tuples
-    records = [tuple(row) for row in df.to_numpy()]
+    user_records = [(row[str("channel_id")],
+                     row[str("username")],
+                     row[str("channel_title")],
+                     row[str("channel_description")],
+                     row[str("subscriber_count")],
+                     row[str("total_view_count")],
+                     row[str("total_video_count")],
+                     row[str("uploads_playlist_id")],
+                     row[str("channel_created_at")],
+                     row[str("profile_url")],
+                     row[str("thumbnail_url")]) for _,row in df_user.iterrows()]
+
+    post_records = [(row[str("video_id")],
+                     row[str("video_title")],
+                     row[str("video_description")],
+                     row[str("video_published_at")],
+                     row[str("video_url")],
+                     row[str("video_views")],
+                     row[str("video_likes")],
+                     row[str("video_comments")],
+                     row[str("created_at")],
+                     row[str("updated_at")]) for _,row in df_posts.iterrows()]
 
     engine = connect_to_database()
     
     if not engine:
         logging.error("Failed to connect to database")
         return
-    create_youtube_data_table(engine)
+    
     try:
         with engine.cursor() as cursor:
-            col_names = ", ".join(columns)
+
+            # === Create tables=====
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_user_data (
+                           channel_id VARCHAR(100) PRIMARY KEY,
+                           username VARCHAR(100) NOT NULL,
+                           channel_title TEXT,
+                           channel_description TEXT,
+                           subscriber_count BIGINT,
+                           total_view_count BIGINT,
+                           total_video_count BIGINT,
+                           uploads_playlist_id VARCHAR(100),
+                           channel_created_at TIMESTAMP,
+                           profile_url Text,
+                           thumbnail_url Text
+                           )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS youtube_post_data(
+                            video_id VARCHAR(100) PRIMARY KEY,
+                            channel_id VARCHAR(100),
+                            FOREIGN KEY (channel_id) REFERENCES youtube_user_data(channel_id),
+                            video_title TEXT,
+                            video_description TEXT,
+                            video_published_at TIMESTAMP,
+                            video_url TEXT,
+                            video_views BIGINT,
+                            video_likes BIGINT,
+                            video_comments BIGINT,
+                            created_at TIMESTAMP,
+                            updated_at TIMESTAMP
+                           )
+            """)
+            engine.commit()
+
+            #=============== user record upsert ==========================
+            user_query = f"""
+                INSERT INTO youtube_user_data(channel_id, username, channel_title, channel_description, subscriber_count,
+                total_view_count, total_video_count, uploads_playlist_id, channel_created_at, profile_url, thumbnail_url)
+                VALUES ({', '.join(['%s'] * 11)})
+                ON CONFLICT (channel_id)  
+                DO UPDATE SET
+                    username = EXCLUDED.username,
+                    channel_title = EXCLUDED.channel_title,
+                    channel_description = EXCLUDED.channel_description,
+                    subscriber_count = EXCLUDED.subscriber_count,
+                    total_view_count = EXCLUDED.total_view_count,
+                    total_video_count = EXCLUDED.total_video_count,
+                    uploads_playlist_id = EXCLUDED.uploads_playlist_id,
+                    channel_created_at = EXCLUDED.channel_created_at,
+                    profile_url = EXCLUDED.profile_url,
+                    thumbnail_url = EXCLUDED.thumbnail_url;
+                """
+
+            cursor.executemany(user_query, user_records)
+            engine.commit()
+
+            #=============== post record upsert ==========================
+
             insert_query = f"""
-                INSERT INTO influencer_youtube ({col_names})
-                VALUES %s
+                INSERT INTO youtube_post_data(channel_id, video_id, video_title, video_description, video_published_at, 
+                video_url, video_views, video_likes, video_comments, created_at, updated_at)
+                VALUES ({', '.join(['%s'] * 11)})
                 ON CONFLICT (channel_id, video_id) 
                 DO UPDATE  SET 
                     channel_id = EXCLUDED.channel_id,
-                    username = EXCLUDED.username, 
-                    channel_title = EXCLUDED.channel_title, 
-                    channel_description = EXCLUDED.channel_description, 
-                    subscriber_count = EXCLUDED.subscriber_count,
-                    total_view_count = EXCLUDED.total_view_count, 
-                    total_video_count = EXCLUDED.total_video_count, 
-                    uploads_playlist_id = EXCLUDED.uploads_playlist_id,
-                    channel_created_at = EXCLUDED.channel_created_at,
-                    profile_url = EXCLUDED.profile_url, 
-                    thumbnail_url = EXCLUDED.thumbnail_url,
                     video_id = EXCLUDED.video_id,
                     video_title = EXCLUDED.video_title, 
                     video_description = EXCLUDED.video_description, 
@@ -325,27 +362,33 @@ def youtube_data(usernames):
                     video_comments = EXCLUDED.video_comments,
                     created_at = EXCLUDED.created_at, 
                     updated_at = EXCLUDED.updated_at;
-            """
-            execute_values(cursor, insert_query, records)
+                """
+
+
+            cursor.executemany(insert_query, post_records)
             engine.commit()
-        logging.info(f"Inserted {len(records)} rows into influencer_youtube")
+        logging.info(f"inserted {len(user_records)} rows into youtube_user_data")
+        logging.info(f"Inserted {len(post_records)} rows into youtube_post_data")
     except Exception as e:
         logging.error(f"Error inserting data: {e}")
         engine.rollback()
     finally:
         engine.close()
 
-import csv
+
 if __name__ == "__main__":
     try:
         # Create SQLAlchemy engine from environment variables
-        engine = create_engine(
-            f"postgresql+psycopg2://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@"
-            f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}?sslmode=require"
-        )
+        conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USERNAME"),
+        password=os.getenv("DB_PASSWORD"),
+        sslmode="require")
 
         query = "SELECT youtube_username FROM username_search WHERE youtube_username IS NOT NULL;"
-        names = pd.read_sql(query, engine)
+        names = pd.read_sql(query, conn)
 
         usernames = (
             names["youtube_username"].astype(str).str.strip().str.lower().dropna().unique().tolist())
