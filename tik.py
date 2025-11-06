@@ -111,84 +111,115 @@ def extract_number(text):
     return int(val * {'': 1, 'k': 1_000, 'm': 1_000_000, 'b': 1_000_000_000}[suf])
 
 # ======================== Scraper ===============================
-async def get_tiktok_profile(username: str):
-    """Scrape TikTok profile details using Playwright."""
+async def get_tiktok_profile(username):
     logging.info(f"Fetching TikTok profile for @{username} ...")
-
-    user_agents = [
-        # diverse user agents
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.6478.182 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.6478.182 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/125.0.6422.113 Safari/537.36"
-    ]
-
+    
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-                "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"
-            ]
-        )
+        launch_args = [
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+            '--no-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-infobars',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-client-side-phishing-detection',
+            '--disable-component-update',
+            '--disable-default-apps',
+            '--disable-features=IsolateOrigins,site-per-process,TranslateUI',
+            '--disable-hang-monitor',
+            '--disable-popup-blocking',
+            '--disable-prompt-on-repost',
+            '--disable-renderer-backgrounding',
+            '--disable-sync',
+            '--hide-scrollbars',
+            '--mute-audio',
+            '--window-size=1366,768',
+        ]
+
+        browser = await p.chromium.launch(headless=True,
+                                          args=launch_args)
         context = await browser.new_context(
             user_agent=random.choice(user_agents),
-            viewport={"width": 1366, "height": 768},
-            locale="en-US"
-        )
-
+            viewport={"width": random.randint(1280, 1920), "height": random.randint(720, 1080)},
+            locale=random.choice(["en-US", "en-GB", "en-NG", "en-CA"]),
+            timezone_id=random.choice(["America/New_York", "Africa/Lagos", "Europe/London"]),
+            geolocation={
+                "longitude": random.uniform(-74.0, 3.4),
+                "latitude": random.uniform(40.7, 6.5)
+            },
+            permissions=["geolocation"])
         await context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            window.chrome = { runtime: {} };
         """)
 
         page = await context.new_page()
-        url = f"https://www.tiktok.com/@{username}"
 
         try:
+            url = f"https://www.tiktok.com/@{username}"
             await page.goto(url, timeout=60000)
-            await page.wait_for_timeout(3000)
+
+            try:
+                await page.locator("button:has-text('Allow all')").click(timeout=5000)
+                logging.info("Clicked 'Allow all' cookie popup.")
+            except:
+                logging.info("No cookie popup found.")
+
+            try:
+                await page.wait_for_selector('[data-e2e="followers-count"]', timeout=20000)
+            except Exception as e:
+                logging.warning(f"Followers count selector not found for @{username}: {e}")
+                followers = 0
+
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(3)
 
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
 
-            # ----------- Extract profile info safely -----------
             followers_tag = soup.find("strong", {"data-e2e": "followers-count"})
-            likes_tag = soup.find("strong", {"data-e2e": "likes-count"})
-            bio_tag = soup.find("h2", {"data-e2e": "user-bio"})
+            followers = extract_number(followers_tag.text) if followers_tag else 0
+            likes_tag = soup.find("strong", {"data-e2e": "likes-count"}) 
+            total_likes = extract_number(likes_tag.text) if likes_tag else 0 
+            bio_tag = soup.find("h2", {"data-e2e": "user-bio"}) 
+            bio = bio_tag.text.strip() if bio_tag else "" 
 
-            followers = extract_number(followers_tag.text if followers_tag else "0")
-            total_likes = extract_number(likes_tag.text if likes_tag else "0")
-            bio = remove_emojis(bio_tag.text.strip() if bio_tag else "")
-
-            # ----------- Extract video data -----------
-            videos_data = []
-            for block in soup.find_all("div", {"data-e2e": "user-post-item"})[:10]:
-                a_tag = block.find("a", href=True)
-                view_tag = block.find("strong", {"data-e2e": "video-views"})
-                video_url = a_tag["href"] if a_tag else ""
-                video_id_match = re.search(r"/video/(\d+)", video_url)
-                video_id = video_id_match.group(1) if video_id_match else "none"
-                views = extract_number(view_tag.text if view_tag else "0")
-
-                videos_data.append({
-                    "username": username.lower(),
-                    "profile_url": f"https://www.tiktok.com/@{username}",
-                    "followers": followers,
-                    "total_likes": total_likes,
-                    "bio": bio,
-                    "video_id": video_id,
-                    "video_url": video_url,
-                    "video_views": views,
-                })
+            videos_data = [] 
+            for block in soup.find_all("div", {"data-e2e": "user-post-item"})[:10]: 
+                a_tag = block.find("a", href=True) 
+                video_url = a_tag["href"] if a_tag else None 
+                view_tag = block.find("strong", {"data-e2e": "video-views"}) 
+                views = extract_number(view_tag.text) if view_tag else 0 
+                if video_url and f"/@{username}/video" in video_url: 
+                    videos_data.append({"username": username, 
+                                        "profile_url": f"https://www.tiktok.com/@{username}", 
+                                        "followers": followers, 
+                                        "total_likes": total_likes, 
+                                        "bio": bio, 
+                                        "video_id": re.search(r"/video/(\d+)", video_url).group(1) if re.search(r"/video/(\d+)", video_url) else None,
+                                        "video_url": video_url, 
+                                        "video_views": views })
+            await asyncio.sleep(random.randint(5, 10))
 
             await browser.close()
-            return videos_data
+
+            if videos_data:
+                logging.info(f"Found {len(videos_data)} videos for @{username}")
+                return videos_data
+            else:
+                logging.warning(f"No videos found or profile inaccessible for @{username}")
+
 
         except Exception as e:
-            logging.error(f"Failed to scrape @{username}: {e}")
-            await browser.close()
+            logging.error(f"Error fetching @{username}: {e}")
             return []
 
 def process_load(username):
@@ -213,41 +244,59 @@ def process_load(username):
         })
     df["username"] = df["username"].astype(str).fillna("no screen name").apply(lambda x: x.lower())
     df["profile_url"] = df["profile_url"].astype(str).fillna("")
-    df['followers'] = (df['followers'].fillna(0).astype(int).mask(df["followers"].duplicated(),0))
-    df["total_likes"] = df["total_likes"].astype(int).mask(df["total_likes"].duplicated(), 0)
+    df['followers'] = df['followers'].fillna(0).astype(int)
+    df["total_likes"] = df["total_likes"].astype(int)
     df["bio"] = df["bio"].apply(remove_emojis).astype(str).fillna(" ")
     df["video_url"] = df["video_url"].astype(str)
     df["video_views"] = df["video_views"].astype(int).fillna(0)
     df["video_id"] = df["video_id"].astype(str).fillna("none")
 
     logging.info(f"{df.dtypes}")
-                    
-    records = [
+    df_user = df[["username", "bio", "profile_url", "followers", "total_likes"]]
+    df_post = df[["username", "video_id", "video_url", "video_views"]]
+    user_records = [
+        (
+            str(row["username"]),
+            str(row["profile_url"]),
+            int(row["followers"]),
+            int(row["total_likes"]),
+            str(row["bio"])
+        )
+        for _, row in df_user.iterrows()
+    ]            
+    post_records = [
             (
                 str(row["username"]),
-                str(row["profile_url"]),
-                int(row["followers"]),
-                int(row["total_likes"]),
-                str(row["bio"]),
                 str(row["video_id"]),
                 str(row["video_url"]),
                 int(row["video_views"])
             )
-            for _, row in df.iterrows()
-]
+            for _, row in df_post.iterrows()
+        ]
 
 
     engine = connect_to_database()
     if engine:
         try:
             with engine.cursor() as cursor:
+                #=== Create user table if not exists ======
                 cursor.execute(
-                    """CREATE TABLE IF NOT EXISTS influencer_tiktok(
+                    """CREATE TABLE IF NOT EXISTS tiktok_user_data(
                     username VARCHAR(100) NOT NULL,
                     profile_url TEXT,
-                    followers INT,
-                    total_likes INT,
+                    followers BIGINT,
+                    total_likes BIGINT,
                     bio TEXT,
+                    PRIMARY KEY (username)
+                    );
+                    """
+                )
+                engine.commit()
+
+                #=== Create post table if not exists ======
+                cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS tiktok_post_data(
+                    username VARCHAR(100) NOT NULL REFERENCES tiktok_user_data(username),
                     video_id VARCHAR(100) NOT NULL,
                     video_url TEXT,
                     video_views INT,
@@ -256,25 +305,34 @@ def process_load(username):
                     """
                 )
                 engine.commit()
-                
-                #=== Upsert Logic=======
+
+                #=== Upsert User Data=======
                 upsert_stmt = """
-                    INSERT INTO influencer_tiktok (username, profile_url, followers, total_likes, bio, video_id, video_url, video_views)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (video_id) DO UPDATE SET
-                        username = EXCLUDED.username,
-                        video_id = EXCLUDED.video_id,
+                    INSERT INTO tiktok_user_data (username, profile_url, followers, total_likes, bio)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (username) DO UPDATE SET
                         profile_url = EXCLUDED.profile_url,
                         followers = EXCLUDED.followers,
                         total_likes = EXCLUDED.total_likes,
-                        bio = EXCLUDED.bio,
+                        bio = EXCLUDED.bio;
+                """
+                cursor.executemany(upsert_stmt, user_records)
+
+                #=== Upsert Post Data=======
+                upsert_stmt = """
+                    INSERT INTO tiktok_post_data (username, video_id, video_url, video_views)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (video_id) 
+                    DO UPDATE SET
+                        username = EXCLUDED.username,
+                        video_id = EXCLUDED.video_id,
                         video_url = EXCLUDED.video_url,
                         video_views = EXCLUDED.video_views;
                 """
-                cursor.executemany(upsert_stmt, records)
+                cursor.executemany(upsert_stmt, post_records)
 
                 engine.commit()
-                logging.info(f"Upserted {len(records)} rows to influencer_tiktok.")
+                logging.info(f"Upserted {len(post_records)} rows to tiktok_post_data.")
         except psycopg2.Error as e:
             engine.rollback()
             logging.error(f"Database error: {e.pgerror or e}")
@@ -282,12 +340,12 @@ def process_load(username):
             cursor.close()
             engine.close()
 
-
   
 # ============ Test Run ============
 if __name__ == "__main__":
 
-    
+    logging.basicConfig(level=logging.INFO)
+
     try:
         # Create SQLAlchemy engine from environment variables
         engine = create_engine(
