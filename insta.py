@@ -111,6 +111,7 @@ def request_get(
                         return {"_status": "RATE_LIMIT", "error": err}
                     return {"_status": "ERROR", "error": err}
                 return {"_status": "OK", "data": data}
+            
 
             elif resp.status_code in (429, 500, 502, 503, 504):
                 logging.warning(f"Retrying ({attempt}/{max_retries}) after status {resp.status_code}")
@@ -119,7 +120,7 @@ def request_get(
 
             elif resp.status_code == 403:
                 logging.warning("403 Forbidden sleeping for 30s to 1 minute")
-                time.sleep(random.uniform(300, 600))
+                time.sleep(random.uniform(900, 1200))
                 return None
 
             elif resp.status_code == 443:
