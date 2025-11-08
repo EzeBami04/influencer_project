@@ -192,7 +192,7 @@ def fetch_user_and_media(ig_business_id: str, username: str) -> Dict[str, Any]:
     return {"status": "OK", "username": username, "user": data["business_discovery"]}
 
 
-def process_user(ig_business_id: str, username: str, cutoff_days: int = 90) -> List[Dict[str, Any]]:
+def process_user(ig_business_id: str, username: str, cutoff_days: int = 180) -> List[Dict[str, Any]]:
     logging.info(f"Fetching @{username} ...")
     result = fetch_user_and_media(ig_business_id, username)
 
