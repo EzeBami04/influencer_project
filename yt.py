@@ -5,8 +5,7 @@ import requests
 
 import emoji
 import psycopg2
-from psycopg2.extras import execute_values
-
+from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from requests.sessions import Session
 from urllib3.util import Retry
@@ -92,31 +91,51 @@ def get_channel_details(username, api_key):
         logging.error(f"Error fetching channel details for {username}: {e}")
         return None
 
-def get_channel_videos(playlist_id, api_key, max_results=5):
-    """Fetch recent videos from channel's uploads playlist."""
+def get_channel_videos(playlist_id, api_key, max_results=15):
+    """Fetch recent videos (last 6 months) from channel's uploads playlist."""
     params = {
         "part": "snippet,contentDetails",
         "playlistId": playlist_id,
         "maxResults": max_results,
         "key": api_key
     }
+
     try:
         res = session.get(PLAYLIST_ITEMS_URL, params=params)
         if res.status_code != 200:
             logging.error(f"Playlist fetch failed: {res.text}")
             return []
+
         data = res.json()
         videos = []
+
+        # Define cutoff date (6 months ago)
+        six_months_ago = datetime.utcnow() - timedelta(days=180)
+
         for item in data.get("items", []):
-            video_id = item["contentDetails"]["videoId"]
-            videos.append({
-                "video_id": video_id,
-                "video_title": clean_text(item["snippet"]["title"]),
-                "video_description": clean_text(item["snippet"].get("description", "")),
-                "video_published_at": item["contentDetails"]["videoPublishedAt"],
-                "video_url": f"https://www.youtube.com/watch?v={video_id}"
-            })
+            published_at_str = item["contentDetails"].get("videoPublishedAt")
+            if not published_at_str:
+                continue
+
+            try:
+                published_at = datetime.strptime(published_at_str, "%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                continue
+
+            # Filter: include only videos from the last 6 months
+            if published_at >= six_months_ago:
+                video_id = item["contentDetails"]["videoId"]
+                videos.append({
+                    "video_id": video_id,
+                    "video_title": clean_text(item["snippet"]["title"]),
+                    "video_description": clean_text(item["snippet"].get("description", "")),
+                    "video_published_at": published_at_str,
+                    "video_url": f"https://www.youtube.com/watch?v={video_id}"
+                })
+
+        logging.info(f"Fetched {len(videos)} videos published in the last 6 months.")
         return videos
+
     except Exception as e:
         logging.error(f"Error fetching videos for playlist {playlist_id}: {e}")
         return []
