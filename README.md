@@ -31,7 +31,7 @@ All discovered usernames are then stored in a **PostgreSQL database** for furthe
 
 
 5. **Downstream pipelines**
-   The solution also features downstream pipelines which takes data from the `user_search` table and load the data into the postgres database seperating the tables into both post and user data with the relevant platform user_id as the existing relationships.
+ The solution also features downstream pipelines which takes usernames from the `user_search` table and load collected from either respective APIs or webscraping as occasion permits the data into the postgres database seperating the tables into both post and user data with the relevant platform user_id as the existing relationships.
 
 6. **CI/CD** 
    GitAction remain the sole CI solution for this project with each of the independent pipelines triggered from the git workflow
